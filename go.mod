@@ -1,4 +1,4 @@
-module gitex
+module github.com/eridan-ltu/gitex
 
 go 1.25.6
 

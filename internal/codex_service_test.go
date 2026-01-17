@@ -3,7 +3,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
-	"gitex/api"
+	"github.com/eridan-ltu/gitex/api"
 	"os"
 	"os/exec"
 	"path/filepath"

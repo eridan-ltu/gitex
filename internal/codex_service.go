@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gitex/api"
+	"github.com/eridan-ltu/gitex/api"
 	"log"
 	"os"
 	"os/exec"

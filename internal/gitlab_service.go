@@ -2,7 +2,7 @@ package internal
 
 import (
 	"fmt"
-	"gitex/api"
+	"github.com/eridan-ltu/gitex/api"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"log"
 	"net/url"

@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"gitex/api"
+	"github.com/eridan-ltu/gitex/api"
 	"testing"
 )
 

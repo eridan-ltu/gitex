@@ -2,7 +2,7 @@ package internal
 
 import (
 	"fmt"
-	"gitex/api"
+	"github.com/eridan-ltu/gitex/api"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
 	"net/url"
 	"strings"
