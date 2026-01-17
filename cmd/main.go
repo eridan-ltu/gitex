@@ -135,4 +135,5 @@ func populateFromEnvIfNecessary(cfg *api.Config) {
 			log.Fatal("ai-api-key is not set. Provide it as an argument or set AI_API_KEY environment variable")
 		}
 	}
+	cfg.CI = os.Getenv("CI") == "true"
 }

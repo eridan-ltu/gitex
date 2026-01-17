@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/eridan-ltu/gitex/api"
 	"os"
 	"os/exec"
@@ -28,9 +29,22 @@ func TestNewCodexService(t *testing.T) {
 	if svc.commandRunner == nil {
 		t.Error("expected commandRunner to be set")
 	}
+	if svc.loginRunner == nil {
+		t.Error("expected loginRunner to be set")
+	}
+	if svc.logoutRunner == nil {
+		t.Error("expected logoutRunner to be set")
+	}
 }
 
 func TestCodexService_GeneratePRInlineComments(t *testing.T) {
+	mockLoginRunner := func(ctx context.Context, apiKey string) error {
+		return nil
+	}
+	mockLogoutRunner := func(ctx context.Context) error {
+		return nil
+	}
+
 	t.Run("successful generation with valid output", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -58,6 +72,8 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			return exec.Command("sh", "-c",
 				"echo '"+string(commentsData)+"' > "+commentsFilePath)
@@ -88,6 +104,118 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		}
 	})
 
+	t.Run("error when login fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		cfg := &api.Config{
+			AiModel:  "test-model",
+			AiApiKey: "test-key",
+			Verbose:  false,
+			CI:       true,
+		}
+
+		svc := NewCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+			return fmt.Errorf("login failed")
+		}
+		svc.logoutRunner = mockLogoutRunner
+
+		options := &api.GeneratePRInlineCommentsOptions{
+			BaseSha:    "base123",
+			StartSha:   "start123",
+			HeadSha:    "head123",
+			SandBoxDir: tmpDir,
+		}
+
+		_, err := svc.GeneratePRInlineComments(options)
+
+		if err == nil {
+			t.Error("expected error when login fails")
+		}
+		if !strings.Contains(err.Error(), "codex login failed") {
+			t.Errorf("expected error message to contain 'codex login failed', got: %v", err)
+		}
+	})
+
+	t.Run("login receives correct api key", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		commentsFilePath := filepath.Join(tmpDir, commentsFileName)
+
+		var capturedApiKey string
+
+		cfg := &api.Config{
+			AiModel:  "test-model",
+			AiApiKey: "my-secret-key",
+			Verbose:  false,
+			CI:       true,
+		}
+
+		svc := NewCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+			capturedApiKey = apiKey
+			return nil
+		}
+		svc.logoutRunner = mockLogoutRunner
+		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			return exec.Command("sh", "-c", "echo '[]' > "+commentsFilePath)
+		}
+
+		options := &api.GeneratePRInlineCommentsOptions{
+			BaseSha:    "base123",
+			StartSha:   "start123",
+			HeadSha:    "head123",
+			SandBoxDir: tmpDir,
+		}
+
+		_, _ = svc.GeneratePRInlineComments(options)
+
+		if capturedApiKey != "my-secret-key" {
+			t.Errorf("expected api key 'my-secret-key', got '%s'", capturedApiKey)
+		}
+	})
+
+	t.Run("login and logout not called when CI is false", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		commentsFilePath := filepath.Join(tmpDir, commentsFileName)
+
+		var loginCalled, logoutCalled bool
+
+		cfg := &api.Config{
+			AiModel: "test-model",
+			Verbose: false,
+			CI:      false,
+		}
+
+		svc := NewCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+			loginCalled = true
+			return nil
+		}
+		svc.logoutRunner = func(ctx context.Context) error {
+			logoutCalled = true
+			return nil
+		}
+		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			return exec.Command("sh", "-c", "echo '[]' > "+commentsFilePath)
+		}
+
+		options := &api.GeneratePRInlineCommentsOptions{
+			BaseSha:    "base123",
+			StartSha:   "start123",
+			HeadSha:    "head123",
+			SandBoxDir: tmpDir,
+		}
+
+		_, _ = svc.GeneratePRInlineComments(options)
+
+		if loginCalled {
+			t.Error("expected login NOT to be called when CI is false")
+		}
+		if logoutCalled {
+			t.Error("expected logout NOT to be called when CI is false")
+		}
+	})
+
 	t.Run("error when command fails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -97,6 +225,8 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			// Return a command that will fail
 			return exec.Command("sh", "-c", "exit 1")
@@ -129,6 +259,8 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			// Write invalid JSON
 			return exec.Command("sh", "-c",
@@ -161,6 +293,8 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			// Command succeeds but doesn't create file
 			return exec.Command("sh", "-c", "exit 0")
@@ -185,6 +319,13 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 }
 
 func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
+	mockLoginRunner := func(ctx context.Context, apiKey string) error {
+		return nil
+	}
+	mockLogoutRunner := func(ctx context.Context) error {
+		return nil
+	}
+
 	t.Run("successful generation with context", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -207,6 +348,8 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			return exec.Command("sh", "-c",
 				"echo '"+string(commentsData)+"' > "+commentsFilePath)
@@ -243,6 +386,9 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
+		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+			return ctx.Err()
+		}
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			// Command that would take time
 			return exec.CommandContext(ctx, "sleep", "10")
@@ -273,6 +419,8 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			capturedArgs = append([]string{name}, args...)
 
@@ -323,6 +471,8 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = mockLoginRunner
+		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			return exec.Command("sh", "-c",
 				"echo '[]' > "+commentsFilePath)
@@ -360,6 +510,12 @@ func TestCodexService_CleanupBehavior(t *testing.T) {
 		}
 
 		svc := NewCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+			return nil
+		}
+		svc.logoutRunner = func(ctx context.Context) error {
+			return nil
+		}
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			// Command fails but file should still be cleaned up
 			return exec.Command("sh", "-c", "exit 1")

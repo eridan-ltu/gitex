@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const commentsFileName = "comments.codex"
@@ -16,13 +17,27 @@ const commentsFileName = "comments.codex"
 type CodexService struct {
 	cfg           *api.Config
 	commandRunner func(ctx context.Context, name string, args ...string) *exec.Cmd
+	loginRunner   func(ctx context.Context, apiKey string) error
+	logoutRunner  func(ctx context.Context) error
 }
 
 func NewCodexService(cfg *api.Config) *CodexService {
 	return &CodexService{
 		cfg:           cfg,
 		commandRunner: exec.CommandContext,
+		loginRunner:   defaultLoginRunner,
+		logoutRunner:  defaultLogoutRunner,
 	}
+}
+
+func defaultLoginRunner(ctx context.Context, apiKey string) error {
+	loginCmd := exec.CommandContext(ctx, "codex", "login", "--with-api-key")
+	loginCmd.Stdin = strings.NewReader(apiKey)
+	return loginCmd.Run()
+}
+
+func defaultLogoutRunner(ctx context.Context) error {
+	return exec.CommandContext(ctx, "codex", "logout").Run()
 }
 
 func (c *CodexService) GeneratePRInlineComments(options *api.GeneratePRInlineCommentsOptions) ([]*api.InlineComment, error) {
@@ -34,6 +49,18 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 		commentsFilePath := filepath.Join(options.SandBoxDir, commentsFileName)
 		_ = os.Remove(commentsFilePath)
 	}()
+
+	if c.cfg.CI {
+		if err := c.loginRunner(ctx, c.cfg.AiApiKey); err != nil {
+			return nil, fmt.Errorf("codex login failed: %w", err)
+		}
+	}
+	defer func() {
+		if c.cfg.CI { //gotta prevent from logging out
+			_ = c.logoutRunner(ctx)
+		}
+	}()
+
 	cmd := c.commandRunner(
 		ctx,
 		"codex",
