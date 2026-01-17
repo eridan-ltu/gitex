@@ -98,7 +98,7 @@ func parseInput() (string, *api.Config) {
 	cfg := &api.Config{}
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fs.StringVar(&cfg.VcsApiKey, "api-key", "", "GitLab API Key")
-	fs.StringVar(&cfg.VcsRemoteUrl, "gitlab-url", "https://gitlab.com", "GitLab URL")
+	fs.StringVar(&cfg.VcsRemoteUrl, "vcs-url", "https://gitlab.com", "GitLab URL")
 	fs.StringVar(&cfg.AiModel, "codex-model", "gpt-5.1-codex-mini", "Codex model")
 	fs.StringVar(&cfg.AiApiKey, "codex-api-key", "", "Codex API Key")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")

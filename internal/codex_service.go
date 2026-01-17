@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -103,15 +102,8 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	} else {
-		devNull, err := os.OpenFile("/dev/null", os.O_WRONLY, 0)
-		if err != nil {
-			log.Fatalf("Failed to open /dev/null: %v", err)
-		}
-		defer func(devNull *os.File) {
-			_ = devNull.Close()
-		}(devNull)
-		cmd.Stdout = devNull
-		cmd.Stderr = devNull
+		cmd.Stdout = nil
+		cmd.Stderr = nil
 	}
 
 	err := cmd.Run()
