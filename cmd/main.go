@@ -38,7 +38,7 @@ func main() {
 
 	tempDir, err := os.MkdirTemp("", prInfo.ProjectName+"-*")
 	if err != nil {
-		return
+		log.Fatalf("Failed to create temp directory: %v", err)
 	}
 
 	defer func() {

@@ -88,9 +88,7 @@ func parseWebUrl(webUrl string) (string, int, error) {
 		return "", 0, err
 	}
 
-	projectId := projectPath
-
-	return projectId, mrId, nil
+	return projectPath, mrId, nil
 }
 
 func convertApiComment(comment *api.InlineComment) *gitlab.CreateMergeRequestDiscussionOptions {
