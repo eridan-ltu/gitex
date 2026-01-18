@@ -1,10 +1,11 @@
-package internal
+package ai
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,15 +70,15 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		// Create a mock comments file
 		expectedComments := []*api.InlineComment{
 			{
-				Body: Ptr("Test comment"),
+				Body: util.Ptr("Test comment"),
 				Position: &api.InlineCommentPosition{
-					PositionType: Ptr("text"),
-					BaseSha:      Ptr("base123"),
-					StartSha:     Ptr("start123"),
-					HeadSha:      Ptr("head123"),
-					OldPath:      Ptr("old.go"),
-					NewPath:      Ptr("new.go"),
-					NewLine:      Ptr(int64(10)),
+					PositionType: util.Ptr("text"),
+					BaseSha:      util.Ptr("base123"),
+					StartSha:     util.Ptr("start123"),
+					HeadSha:      util.Ptr("head123"),
+					OldPath:      util.Ptr("old.go"),
+					NewPath:      util.Ptr("new.go"),
+					NewLine:      util.Ptr(int64(10)),
 				},
 			},
 		}
@@ -349,11 +350,11 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 
 		expectedComments := []*api.InlineComment{
 			{
-				Body: Ptr("Context test comment"),
+				Body: util.Ptr("Context test comment"),
 				Position: &api.InlineCommentPosition{
-					PositionType: Ptr("text"),
-					BaseSha:      Ptr("base456"),
-					HeadSha:      Ptr("head456"),
+					PositionType: util.Ptr("text"),
+					BaseSha:      util.Ptr("base456"),
+					HeadSha:      util.Ptr("head456"),
 				},
 			},
 		}

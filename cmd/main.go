@@ -20,25 +20,25 @@ func main() {
 
 	serviceFactory := internal.NewServiceFactory(cfg)
 
-	remoteGitServiceType, err := serviceFactory.DetectRemoteGitServiceType(mrUrl)
+	vcsProviderType, err := serviceFactory.DetectVCSProviderType(mrUrl)
 	if err != nil {
-		log.Fatalf("Failed to detect remote git service type: %v", err)
+		log.Fatalf("Failed to detect VCS provider type: %v", err)
 	}
-	log.Printf("Remote Git Service Type: %s\n", remoteGitServiceType)
+	log.Printf("VCS provider type: %s\n", vcsProviderType)
 
-	remoteGitService, err := serviceFactory.CreateRemoteGitService(remoteGitServiceType)
+	vcsProviderService, err := serviceFactory.CreateVCSProvider(vcsProviderType)
 	if err != nil {
-		log.Fatalf("Failed to create remote git service: %v", err)
+		log.Fatalf("Failed to create VCS provider service: %v", err)
 	}
 
-	prInfo, err := remoteGitService.GetPullRequestInfo(&mrUrl)
+	prInfo, err := vcsProviderService.GetPullRequestInfo(&mrUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	tempDir, err := os.MkdirTemp("", prInfo.ProjectName+"-*")
 	if err != nil {
-		return
+		log.Fatalf("Failed to create temp directory: %v", err)
 	}
 
 	defer func() {
@@ -47,7 +47,7 @@ func main() {
 		}
 	}()
 
-	gitService, err := serviceFactory.CreateVersionControlService(internal.VersionControlTypeGit)
+	gitService, err := serviceFactory.CreateVersionControlService(internal.VCSTypeGit)
 	if err != nil {
 		log.Fatalf("Failed to create version control service: %v", err)
 	}
@@ -85,7 +85,9 @@ func main() {
 	}
 
 	log.Println("Pushing comments to VCS")
-	remoteGitService.SendInlineComments(comments, prInfo)
+	if err = vcsProviderService.SendInlineComments(comments, prInfo); err != nil {
+		log.Printf("Warning: %v", err)
+	}
 	log.Printf("Finished PR analysis at %s\n", prInfo.SourceBranch)
 
 }
@@ -98,16 +100,16 @@ func parseInput() (string, *api.Config) {
 
 	cfg := &api.Config{}
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fs.StringVar(&cfg.VcsApiKey, "api-key", "", "GitLab API Key")
-	fs.StringVar(&cfg.VcsRemoteUrl, "vcs-url", "https://gitlab.com", "GitLab URL")
-	fs.StringVar(&cfg.AiModel, "codex-model", "gpt-5.1-codex-mini", "Codex model")
-	fs.StringVar(&cfg.AiApiKey, "codex-api-key", "", "Codex API Key")
+	fs.StringVar(&cfg.VcsApiKey, "vcs-api-key", "", "VCS provider API Key")
+	fs.StringVar(&cfg.VcsRemoteUrl, "vcs-url", "", "VCS provider url")
+	fs.StringVar(&cfg.AiModel, "ai-model", "gpt-5.1-codex-mini", "Codex model")
+	fs.StringVar(&cfg.AiApiKey, "ai-api-key", "", "AI API Key")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")
 
 	fs.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <merge-request-url> [flags]\n\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <pull-request-url> [flags]\n\n", os.Args[0])
 		_, _ = fmt.Fprintf(os.Stderr, "Arguments:\n")
-		_, _ = fmt.Fprintf(os.Stderr, "  merge-request-url    Pull request URL\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  pull-request-url    Pull request URL\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}

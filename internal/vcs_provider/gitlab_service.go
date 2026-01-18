@@ -1,10 +1,10 @@
-package internal
+package vcs_provider
 
 import (
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
-	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,7 +15,8 @@ type GitLabService struct {
 }
 
 func NewGitLabService(cfg *api.Config) (*GitLabService, error) {
-	clientOptionFunc := gitlab.WithBaseURL(cfg.VcsRemoteUrl)
+	baseUrl := util.GetOrDefault(&cfg.VcsRemoteUrl, "https://gitlab.com/")
+	clientOptionFunc := gitlab.WithBaseURL(baseUrl)
 	client, err := gitlab.NewClient(cfg.VcsApiKey, clientOptionFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitLab client: %w", err)
@@ -26,7 +27,7 @@ func NewGitLabService(cfg *api.Config) (*GitLabService, error) {
 }
 
 func (g *GitLabService) GetPullRequestInfo(pullRequestURL *string) (*api.PullRequestInfo, error) {
-	projectPath, mrId, err := parseWebUrl(*pullRequestURL)
+	projectPath, mrId, err := g.parseWebUrl(*pullRequestURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse merge request URL: %v", err)
 	}
@@ -53,38 +54,50 @@ func (g *GitLabService) GetPullRequestInfo(pullRequestURL *string) (*api.PullReq
 	}, nil
 }
 
-func (g *GitLabService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) {
-	for i := range comments {
-		gitlabComment := convertApiComment(comments[i])
-		_, _, err := g.client.Discussions.CreateMergeRequestDiscussion(pullRequestInfo.ProjectPath, pullRequestInfo.PullRequestId, gitlabComment)
-		if err != nil {
-			log.Printf("failed to create merge request discussion: %v", err)
+func (g *GitLabService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) error {
+	failed := util.WithRetry(comments, 3, func(comment *api.InlineComment) error {
+		gitlabComment := convertApiComment(comment)
+		if gitlabComment == nil {
+			return nil
 		}
+		_, _, err := g.client.Discussions.CreateMergeRequestDiscussion(pullRequestInfo.ProjectPath, pullRequestInfo.PullRequestId, gitlabComment)
+		return err
+	})
+	if len(failed) > 0 {
+		return fmt.Errorf("failed to send %d comments after retries", len(failed))
 	}
+	return nil
 }
 
-func parseWebUrl(webUrl string) (string, int, error) {
+func (g *GitLabService) parseWebUrl(webUrl string) (string, int, error) {
 	parsed, err := url.Parse(webUrl)
 	if err != nil {
 		return "", 0, fmt.Errorf("invalid URL: %w", err)
 	}
 
 	parts := strings.Split(parsed.Path, "/")
-	if len(parts) < 6 {
+
+	mrIndex := -1
+	for i, p := range parts {
+		if p == "merge_requests" {
+			mrIndex = i
+			break
+		}
+	}
+
+	if mrIndex == -1 || mrIndex+1 >= len(parts) {
 		return "", 0, fmt.Errorf("invalid Merge Request URL format")
 	}
 
-	projectPath := strings.Join(parts[1:len(parts)-3], "/")
-	mrIdStr := parts[len(parts)-1]
+	projectPath := strings.Join(parts[1:mrIndex-1], "/")
+	mrIdStr := parts[mrIndex+1]
 
 	mrId, err := strconv.Atoi(mrIdStr)
 	if err != nil {
 		return "", 0, err
 	}
 
-	projectId := projectPath
-
-	return projectId, mrId, nil
+	return projectPath, mrId, nil
 }
 
 func convertApiComment(comment *api.InlineComment) *gitlab.CreateMergeRequestDiscussionOptions {
@@ -93,7 +106,6 @@ func convertApiComment(comment *api.InlineComment) *gitlab.CreateMergeRequestDis
 	}
 	return &gitlab.CreateMergeRequestDiscussionOptions{
 		Body:      comment.Body,
-		CommitID:  comment.CommitID,
 		CreatedAt: comment.CreatedAt,
 		Position:  convertInlineCommentPosition(comment.Position),
 	}

@@ -7,7 +7,7 @@ import (
 
 type RemoteGitService interface {
 	GetPullRequestInfo(pullRequestURL *string) (*PullRequestInfo, error)
-	SendInlineComments(comments []*InlineComment, pullRequestInfo *PullRequestInfo)
+	SendInlineComments(comments []*InlineComment, pullRequestInfo *PullRequestInfo) error
 }
 
 type Config struct {
@@ -79,4 +79,9 @@ type PullRequestInfo struct {
 	ProjectId      int64  `json:"project_id"`
 	ProjectPath    string `json:"project_path"`
 	PullRequestId  int64  `json:"pull_request_id"`
+	Owner          string `json:"owner"`
 }
+
+type AIAgentType string
+type VersionControlType string
+type VCSProviderType string

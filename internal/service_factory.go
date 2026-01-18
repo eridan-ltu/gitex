@@ -3,20 +3,19 @@ package internal
 import (
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/ai"
+	"github.com/eridan-ltu/gitex/internal/vcs"
+	"github.com/eridan-ltu/gitex/internal/vcs_provider"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
 	"net/url"
 	"strings"
 )
 
-type AIAgentType string
-type VersionControlType string
-type RemoteGitServiceType string
-
-const AIAgentTypeCodex AIAgentType = "codex"
-const VersionControlTypeGit VersionControlType = "git"
-const RemoteGitServiceTypeGitLab RemoteGitServiceType = "gitlab"
-const RemoteGitServiceTypeGitHub RemoteGitServiceType = "github"
-const RemoteGitServiceTypeUnknown RemoteGitServiceType = "unknown"
+const AIAgentTypeCodex api.AIAgentType = "codex"
+const VCSTypeGit api.VersionControlType = "git"
+const VCSProviderTypeGitlab api.VCSProviderType = "gitlab"
+const VCSProviderTypeGithub api.VCSProviderType = "github"
+const VCSProviderTypeUnknown api.VCSProviderType = "unknown"
 
 type ServiceFactory struct {
 	cfg *api.Config
@@ -28,10 +27,10 @@ func NewServiceFactory(cfg *api.Config) *ServiceFactory {
 	}
 }
 
-func (a *ServiceFactory) CreateAiAgentService(kind AIAgentType) (api.AIAgentService, error) {
+func (a *ServiceFactory) CreateAiAgentService(kind api.AIAgentType) (api.AIAgentService, error) {
 	switch kind {
 	case AIAgentTypeCodex:
-		codexService, err := NewCodexService(a.cfg)
+		codexService, err := ai.NewCodexService(a.cfg)
 		if err != nil {
 			return nil, fmt.Errorf("error creating CodexService: %w", err)
 		}
@@ -41,10 +40,10 @@ func (a *ServiceFactory) CreateAiAgentService(kind AIAgentType) (api.AIAgentServ
 	}
 }
 
-func (a *ServiceFactory) CreateVersionControlService(kind VersionControlType) (api.VersionControlService, error) {
+func (a *ServiceFactory) CreateVersionControlService(kind api.VersionControlType) (api.VersionControlService, error) {
 	switch kind {
-	case VersionControlTypeGit:
-		return NewGitService(&http.BasicAuth{
+	case VCSTypeGit:
+		return vcs.NewGitService(&http.BasicAuth{
 			Username: "oauth",
 			Password: a.cfg.VcsApiKey,
 		}), nil
@@ -53,16 +52,19 @@ func (a *ServiceFactory) CreateVersionControlService(kind VersionControlType) (a
 	}
 }
 
-func (a *ServiceFactory) CreateRemoteGitService(kind RemoteGitServiceType) (api.RemoteGitService, error) {
+func (a *ServiceFactory) CreateVCSProvider(kind api.VCSProviderType) (api.RemoteGitService, error) {
 	switch kind {
-	case RemoteGitServiceTypeGitLab:
-		return NewGitLabService(a.cfg)
+	case VCSProviderTypeGitlab:
+		return vcs_provider.NewGitLabService(a.cfg)
+	case VCSProviderTypeGithub:
+		return vcs_provider.NewGitHubService(a.cfg)
+
 	default:
 		return nil, fmt.Errorf("unsupported remote git service: %s", kind)
 	}
 }
 
-func (a *ServiceFactory) DetectRemoteGitServiceType(rawURL string) (RemoteGitServiceType, error) {
+func (a *ServiceFactory) DetectVCSProviderType(rawURL string) (api.VCSProviderType, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse url %s: %v", rawURL, err)
@@ -72,15 +74,15 @@ func (a *ServiceFactory) DetectRemoteGitServiceType(rawURL string) (RemoteGitSer
 	path := strings.ToLower(u.Path)
 
 	if host == "github.com" {
-		return RemoteGitServiceTypeGitHub, nil
+		return VCSProviderTypeGithub, nil
 	}
 
 	if strings.Contains(path, "/-/merge_requests/") {
-		return RemoteGitServiceTypeGitLab, nil
+		return VCSProviderTypeGitlab, nil
 	}
 
 	if strings.Contains(path, "/pull/") {
-		return RemoteGitServiceTypeGitHub, nil
+		return VCSProviderTypeGithub, nil
 	}
-	return RemoteGitServiceTypeUnknown, nil
+	return VCSProviderTypeUnknown, nil
 }

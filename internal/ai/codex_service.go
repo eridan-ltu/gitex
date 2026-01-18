@@ -1,4 +1,4 @@
-package internal
+package ai
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
 	"os"
 	"os/exec"
 	"path"
@@ -47,12 +48,12 @@ type CodexService struct {
 }
 
 func NewCodexService(cfg *api.Config) (*CodexService, error) {
-	if err := ensureDirectoryWritable(cfg.BinDir); err != nil {
+	if err := util.EnsureDirectoryWritable(cfg.BinDir); err != nil {
 		return nil, fmt.Errorf("bin directory error: %w", err)
 	}
 
 	codexHomePath := path.Join(cfg.HomeDir, ".codex")
-	if err := ensureDirectoryWritable(codexHomePath); err != nil {
+	if err := util.EnsureDirectoryWritable(codexHomePath); err != nil {
 		return nil, fmt.Errorf("codex home directory error: %w", err)
 	}
 
@@ -153,6 +154,7 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 			3. generate inline notes for changes in this format
 			[{
 			"body": <YOUR_COMMENT>,
+			"commit_id": "%s",
 			"position": {
 			  "position_type": "text",
 			  "base_sha": "%s",
@@ -178,7 +180,7 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 	        store json inside %s commentsFile.
 	        4. Generate overall review inside review.codex commentsFile as plain text.
 	        5. Do not include the findings you specified in the inline comments
-			`, options.BaseSha, options.BaseSha, options.StartSha, options.HeadSha, commentsFileName),
+			`, options.BaseSha, options.HeadSha, options.BaseSha, options.StartSha, options.HeadSha, commentsFileName),
 	)
 
 	cmd.Env = c.env

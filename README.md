@@ -17,17 +17,19 @@ gitex https://gitlab.com/myorg/project/-/merge_requests/42
 
 That's it. The tool clones the branch, analyzes the diff with Codex, and posts comments directly on the PR. It looks for real issues - null pointer risks, type mismatches, unhandled edge cases - not formatting stuff.
 
-Works with GitLab today, GitHub support coming soon.
+Works with GitLab and GitHub.
 
 ## Quick start
 
 ```bash
 # Set your tokens
-export VCS_API_KEY=glpat-xxxxxxxxxxxx    # GitLab token
+export VCS_API_KEY=glpat-xxxxxxxxxxxx    # GitLab/GitHub token
 export AI_API_KEY=sk-xxxxxxxxxxxx         # OpenAI key
 
 # Run it
 gitex https://gitlab.com/yourorg/yourproject/-/merge_requests/123
+# or
+gitex https://github.com/yourorg/yourproject/pull/123
 ```
 
 ## Installation
@@ -72,11 +74,15 @@ Flags:
 3. Installs Codex CLI if needed (checks version, skips if already installed)
 4. Runs `git diff` against the target branch
 5. Sends the diff to Codex with review instructions
-6. Parses the response and posts inline comments
+6. Parses the response and posts inline comments (with retry on failure)
 
 Codex runs sandboxed with its own home directory (`~/.gitex/.codex`) to avoid conflicts with your local Codex config.
 
 The AI is prompted to trace code paths and gather evidence before flagging something. It classifies issues as definite, possible, or safe - and only comments when there's a real concern.
+
+## Roadmap
+
+- Claude support (coming soon)
 
 ## Contributing
 
