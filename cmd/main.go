@@ -1,100 +1,29 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"github.com/eridan-ltu/gitex/api"
-	"github.com/eridan-ltu/gitex/internal"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
-	"time"
+
+	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/core"
 )
 
 func main() {
-
 	mrUrl, cfg := parseInput()
 
-	serviceFactory := internal.NewServiceFactory(cfg)
-
-	vcsProviderType, err := serviceFactory.DetectVCSProviderType(mrUrl)
-	if err != nil {
-		log.Fatalf("Failed to detect VCS provider type: %v", err)
+	factory := core.NewServiceFactory(cfg)
+	app := core.NewApp(factory)
+	if err := app.Run(mrUrl); err != nil {
+		log.Fatalf("Error: %v", err)
 	}
-	log.Printf("VCS provider type: %s\n", vcsProviderType)
-
-	vcsProviderService, err := serviceFactory.CreateVCSProvider(vcsProviderType)
-	if err != nil {
-		log.Fatalf("Failed to create VCS provider service: %v", err)
-	}
-
-	prInfo, err := vcsProviderService.GetPullRequestInfo(&mrUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tempDir, err := os.MkdirTemp("", prInfo.ProjectName+"-*")
-	if err != nil {
-		log.Fatalf("Failed to create temp directory: %v", err)
-	}
-
-	defer func() {
-		if err = os.RemoveAll(tempDir); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to cleanup directory %s: %v\n", tempDir, err)
-		}
-	}()
-
-	gitService, err := serviceFactory.CreateVersionControlService(internal.VCSTypeGit)
-	if err != nil {
-		log.Fatalf("Failed to create version control service: %v", err)
-	}
-
-	cloneCtx, cloneCancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cloneCancel()
-	err = gitService.CloneRepoWithContext(cloneCtx, tempDir, prInfo.ProjectHttpUrl, prInfo.SourceBranch)
-	if err != nil {
-		log.Fatalf("Failed to clone repo: %v", err)
-	}
-	log.Printf("Successfully cloned repo: %s\n", prInfo.ProjectName)
-
-	aiAgent, err := serviceFactory.CreateAiAgentService(internal.AIAgentTypeCodex)
-	if err != nil {
-		log.Fatalf("Failed to create agent service: %v", err)
-	}
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancelFunc()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigChan
-		fmt.Println("Killing AiAgent command:", sig)
-		cancelFunc()
-	}()
-	log.Printf("Starting PR analysis at %s\n", prInfo.SourceBranch)
-	comments, err := aiAgent.GeneratePRInlineCommentsWithContext(ctx, &api.GeneratePRInlineCommentsOptions{
-		SandBoxDir: tempDir,
-		BaseSha:    prInfo.BaseSha,
-		StartSha:   prInfo.StartSha,
-		HeadSha:    prInfo.HeadSha,
-	})
-	if err != nil {
-		log.Fatalf("Failed to generate inline comments: %v", err)
-	}
-
-	log.Println("Pushing comments to VCS")
-	if err = vcsProviderService.SendInlineComments(comments, prInfo); err != nil {
-		log.Printf("Warning: %v", err)
-	}
-	log.Printf("Finished PR analysis at %s\n", prInfo.SourceBranch)
-
 }
 
 func parseInput() (string, *api.Config) {
 	if len(os.Args) < 2 {
-		log.Fatalf("Usage: gitex <pull-request-url> [flags]\n")
+		log.Fatalf("Usage: gitex <pull-request-url> [flags]")
 	}
 	mrUrl := os.Args[1]
 
@@ -114,17 +43,16 @@ func parseInput() (string, *api.Config) {
 		fs.PrintDefaults()
 	}
 
-	err := fs.Parse(os.Args[2:])
-	if err != nil {
+	if err := fs.Parse(os.Args[2:]); err != nil {
 		log.Fatalf("Failed to parse flags: %v", err)
 	}
 
-	populateFromEnvIfNecessary(cfg)
+	populateFromEnv(cfg)
 
 	return mrUrl, cfg
 }
 
-func populateFromEnvIfNecessary(cfg *api.Config) {
+func populateFromEnv(cfg *api.Config) {
 	if cfg.VcsApiKey == "" {
 		cfg.VcsApiKey = os.Getenv("VCS_API_KEY")
 		if cfg.VcsApiKey == "" {
@@ -138,8 +66,8 @@ func populateFromEnvIfNecessary(cfg *api.Config) {
 			log.Fatal("ai-api-key is not set. Provide it as an argument or set AI_API_KEY environment variable")
 		}
 	}
-	cfg.CI = os.Getenv("CI") == "true"
 
+	cfg.CI = os.Getenv("CI") == "true"
 	cfg.HomeDir = os.Getenv("GITEX_HOME")
 	if cfg.HomeDir == "" {
 		dir, err := os.UserHomeDir()

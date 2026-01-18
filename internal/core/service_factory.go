@@ -1,14 +1,15 @@
-package internal
+package core
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/eridan-ltu/gitex/api"
 	"github.com/eridan-ltu/gitex/internal/ai"
 	"github.com/eridan-ltu/gitex/internal/vcs"
 	"github.com/eridan-ltu/gitex/internal/vcs_provider"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
-	"net/url"
-	"strings"
 )
 
 const AIAgentTypeCodex api.AIAgentType = "codex"
@@ -17,9 +18,18 @@ const VCSProviderTypeGitlab api.VCSProviderType = "gitlab"
 const VCSProviderTypeGithub api.VCSProviderType = "github"
 const VCSProviderTypeUnknown api.VCSProviderType = "unknown"
 
+type ServiceFactoryInterface interface {
+	DetectVCSProviderType(url string) (api.VCSProviderType, error)
+	CreateVCSProvider(kind api.VCSProviderType) (api.RemoteGitService, error)
+	CreateVersionControlService(kind api.VersionControlType) (api.VersionControlService, error)
+	CreateAiAgentService(kind api.AIAgentType) (api.AIAgentService, error)
+}
+
 type ServiceFactory struct {
 	cfg *api.Config
 }
+
+var _ ServiceFactoryInterface = (*ServiceFactory)(nil)
 
 func NewServiceFactory(cfg *api.Config) *ServiceFactory {
 	return &ServiceFactory{
@@ -58,7 +68,6 @@ func (a *ServiceFactory) CreateVCSProvider(kind api.VCSProviderType) (api.Remote
 		return vcs_provider.NewGitLabService(a.cfg)
 	case VCSProviderTypeGithub:
 		return vcs_provider.NewGitHubService(a.cfg)
-
 	default:
 		return nil, fmt.Errorf("unsupported remote git service: %s", kind)
 	}
