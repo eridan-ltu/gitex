@@ -154,7 +154,7 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 			3. generate inline notes for changes in this format
 			[{
 			"body": <YOUR_COMMENT>,
-			"commit_id": "%s"
+			"commit_id": "%s",
 			"position": {
 			  "position_type": "text",
 			  "base_sha": "%s",
