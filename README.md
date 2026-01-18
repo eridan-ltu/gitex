@@ -71,7 +71,7 @@ Flags:
 
 1. Parses the PR URL to figure out the project and MR
 2. Clones the source branch to a temp directory
-3. Installs Codex CLI if needed (checks version, skips if already installed)
+3. Installs Codex CLI if needed (`npm i @openai/codex@0.87.0` into `~/.gitex/bin`)
 4. Runs `git diff` against the target branch
 5. Sends the diff to Codex with review instructions
 6. Parses the response and posts inline comments (with retry on failure)
