@@ -8,36 +8,94 @@ import (
 	"github.com/eridan-ltu/gitex/api"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
-const commentsFileName = "comments.codex"
+const (
+	commentsFileName = "comments.codex"
+	codexVersion     = "0.87.0"
+)
+
+func isCodexInstalled(binDir string) bool {
+	packageJsonPath := path.Join(binDir, "node_modules", "@openai", "codex", "package.json")
+
+	data, err := os.ReadFile(packageJsonPath)
+	if err != nil {
+		return false
+	}
+
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false
+	}
+
+	return pkg.Version == codexVersion
+}
 
 type CodexService struct {
 	cfg           *api.Config
+	codexBinPath  string
+	env           []string
 	commandRunner func(ctx context.Context, name string, args ...string) *exec.Cmd
-	loginRunner   func(ctx context.Context, apiKey string) error
-	logoutRunner  func(ctx context.Context) error
+	loginRunner   func(ctx context.Context, apiKey, codexBinPath *string, env []string) error
+	logoutRunner  func(ctx context.Context, codexBinPath *string, env []string) error
 }
 
-func NewCodexService(cfg *api.Config) *CodexService {
+func NewCodexService(cfg *api.Config) (*CodexService, error) {
+	if err := ensureDirectoryWritable(cfg.BinDir); err != nil {
+		return nil, fmt.Errorf("bin directory error: %w", err)
+	}
+
+	codexHomePath := path.Join(cfg.HomeDir, ".codex")
+	if err := ensureDirectoryWritable(codexHomePath); err != nil {
+		return nil, fmt.Errorf("codex home directory error: %w", err)
+	}
+
+	if !isCodexInstalled(cfg.BinDir) {
+		ctx, cancelFunc := context.WithTimeout(context.Background(), time.Minute)
+		defer cancelFunc()
+
+		if err := defaultInstallRunner(ctx, &cfg.BinDir); err != nil {
+			return nil, fmt.Errorf("codex install error: %w", err)
+		}
+	}
+
+	binPath := path.Join(cfg.BinDir, "/node_modules/.bin/codex")
+	environment := os.Environ()
+	environment = append(environment, "CODEX_HOME="+codexHomePath)
+
 	return &CodexService{
 		cfg:           cfg,
+		codexBinPath:  binPath,
+		env:           environment,
 		commandRunner: exec.CommandContext,
 		loginRunner:   defaultLoginRunner,
 		logoutRunner:  defaultLogoutRunner,
-	}
+	}, nil
 }
 
-func defaultLoginRunner(ctx context.Context, apiKey string) error {
-	loginCmd := exec.CommandContext(ctx, "codex", "login", "--with-api-key")
-	loginCmd.Stdin = strings.NewReader(apiKey)
+func defaultLoginRunner(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
+	loginCmd := exec.CommandContext(ctx, *codexBinPath, "login", "--with-api-key")
+	loginCmd.Stdin = strings.NewReader(*apiKey)
+	loginCmd.Env = env
+
 	return loginCmd.Run()
 }
 
-func defaultLogoutRunner(ctx context.Context) error {
-	return exec.CommandContext(ctx, "codex", "logout").Run()
+func defaultLogoutRunner(ctx context.Context, codexBinPath *string, env []string) error {
+	logoutCmd := exec.CommandContext(ctx, *codexBinPath, "logout")
+	logoutCmd.Env = env
+	return logoutCmd.Run()
+}
+
+func defaultInstallRunner(ctx context.Context, binDir *string) error {
+	command := exec.CommandContext(ctx, "npm", "i", "@openai/codex@"+codexVersion, "--prefix", *binDir)
+	return command.Run()
 }
 
 func (c *CodexService) GeneratePRInlineComments(options *api.GeneratePRInlineCommentsOptions) ([]*api.InlineComment, error) {
@@ -45,25 +103,23 @@ func (c *CodexService) GeneratePRInlineComments(options *api.GeneratePRInlineCom
 }
 
 func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, options *api.GeneratePRInlineCommentsOptions) ([]*api.InlineComment, error) {
+
 	defer func() {
 		commentsFilePath := filepath.Join(options.SandBoxDir, commentsFileName)
 		_ = os.Remove(commentsFilePath)
 	}()
 
-	if c.cfg.CI {
-		if err := c.loginRunner(ctx, c.cfg.AiApiKey); err != nil {
-			return nil, fmt.Errorf("codex login failed: %w", err)
-		}
+	if err := c.loginRunner(ctx, &c.cfg.AiApiKey, &c.codexBinPath, c.env); err != nil {
+		return nil, fmt.Errorf("codex login failed: %w", err)
 	}
+
 	defer func() {
-		if c.cfg.CI { //gotta prevent from logging out
-			_ = c.logoutRunner(ctx)
-		}
+		_ = c.logoutRunner(ctx, &c.codexBinPath, c.env)
 	}()
 
 	cmd := c.commandRunner(
 		ctx,
-		"codex",
+		c.codexBinPath,
 		"exec",
 		"-s", "workspace-write",
 		"--model", c.cfg.AiModel,
@@ -124,7 +180,10 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 	        5. Do not include the findings you specified in the inline comments
 			`, options.BaseSha, options.BaseSha, options.StartSha, options.HeadSha, commentsFileName),
 	)
+
+	cmd.Env = c.env
 	cmd.Dir = options.SandBoxDir
+
 	if c.cfg.Verbose {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -148,5 +207,4 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 		return nil, fmt.Errorf("error unmarshaling comments file: %w", err)
 	}
 	return comments, nil
-
 }

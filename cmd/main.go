@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -136,4 +137,14 @@ func populateFromEnvIfNecessary(cfg *api.Config) {
 		}
 	}
 	cfg.CI = os.Getenv("CI") == "true"
+
+	cfg.HomeDir = os.Getenv("GITEX_HOME")
+	if cfg.HomeDir == "" {
+		dir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("Failed to get home dir: %v", err)
+		}
+		cfg.HomeDir = filepath.Join(dir, ".gitex")
+	}
+	cfg.BinDir = filepath.Join(cfg.HomeDir, "bin")
 }

@@ -31,7 +31,11 @@ func NewServiceFactory(cfg *api.Config) *ServiceFactory {
 func (a *ServiceFactory) CreateAiAgentService(kind AIAgentType) (api.AIAgentService, error) {
 	switch kind {
 	case AIAgentTypeCodex:
-		return NewCodexService(a.cfg), nil
+		codexService, err := NewCodexService(a.cfg)
+		if err != nil {
+			return nil, fmt.Errorf("error creating CodexService: %w", err)
+		}
+		return codexService, nil
 	default:
 		return nil, fmt.Errorf("unsupported AI agent type: %s", kind)
 	}

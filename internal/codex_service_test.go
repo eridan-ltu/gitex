@@ -12,14 +12,32 @@ import (
 	"testing"
 )
 
+// newTestCodexService creates a CodexService for testing without running npm install
+func newTestCodexService(cfg *api.Config) *CodexService {
+	return &CodexService{
+		cfg:           cfg,
+		codexBinPath:  "codex",
+		env:           os.Environ(),
+		commandRunner: exec.CommandContext,
+		loginRunner:   func(ctx context.Context, apiKey, codexBinPath *string, env []string) error { return nil },
+		logoutRunner:  func(ctx context.Context, codexBinPath *string, env []string) error { return nil },
+	}
+}
+
 func TestNewCodexService(t *testing.T) {
+	tmpDir := t.TempDir()
 	cfg := &api.Config{
 		AiModel: "test-model",
 		Verbose: true,
+		BinDir:  tmpDir,
+		HomeDir: tmpDir,
 	}
 
-	svc := NewCodexService(cfg)
+	svc, err := NewCodexService(cfg)
 
+	if err != nil {
+		t.Skipf("skipping test due to npm install requirement: %v", err)
+	}
 	if svc == nil {
 		t.Fatal("expected CodexService to be non-nil")
 	}
@@ -38,10 +56,10 @@ func TestNewCodexService(t *testing.T) {
 }
 
 func TestCodexService_GeneratePRInlineComments(t *testing.T) {
-	mockLoginRunner := func(ctx context.Context, apiKey string) error {
+	mockLoginRunner := func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
 		return nil
 	}
-	mockLogoutRunner := func(ctx context.Context) error {
+	mockLogoutRunner := func(ctx context.Context, codexBinPath *string, env []string) error {
 		return nil
 	}
 
@@ -71,7 +89,7 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -114,8 +132,8 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			CI:       true,
 		}
 
-		svc := NewCodexService(cfg)
-		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+		svc := newTestCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
 			return fmt.Errorf("login failed")
 		}
 		svc.logoutRunner = mockLogoutRunner
@@ -150,9 +168,9 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			CI:       true,
 		}
 
-		svc := NewCodexService(cfg)
-		svc.loginRunner = func(ctx context.Context, apiKey string) error {
-			capturedApiKey = apiKey
+		svc := newTestCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
+			capturedApiKey = *apiKey
 			return nil
 		}
 		svc.logoutRunner = mockLogoutRunner
@@ -174,7 +192,7 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 		}
 	})
 
-	t.Run("login and logout not called when CI is false", func(t *testing.T) {
+	t.Run("login and logout are always called", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		commentsFilePath := filepath.Join(tmpDir, commentsFileName)
 
@@ -186,12 +204,12 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			CI:      false,
 		}
 
-		svc := NewCodexService(cfg)
-		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+		svc := newTestCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
 			loginCalled = true
 			return nil
 		}
-		svc.logoutRunner = func(ctx context.Context) error {
+		svc.logoutRunner = func(ctx context.Context, codexBinPath *string, env []string) error {
 			logoutCalled = true
 			return nil
 		}
@@ -208,11 +226,11 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 
 		_, _ = svc.GeneratePRInlineComments(options)
 
-		if loginCalled {
-			t.Error("expected login NOT to be called when CI is false")
+		if !loginCalled {
+			t.Error("expected login to be called")
 		}
-		if logoutCalled {
-			t.Error("expected logout NOT to be called when CI is false")
+		if !logoutCalled {
+			t.Error("expected logout to be called")
 		}
 	})
 
@@ -224,7 +242,7 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -258,7 +276,7 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -292,7 +310,7 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -319,10 +337,10 @@ func TestCodexService_GeneratePRInlineComments(t *testing.T) {
 }
 
 func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
-	mockLoginRunner := func(ctx context.Context, apiKey string) error {
+	mockLoginRunner := func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
 		return nil
 	}
-	mockLogoutRunner := func(ctx context.Context) error {
+	mockLogoutRunner := func(ctx context.Context, codexBinPath *string, env []string) error {
 		return nil
 	}
 
@@ -347,7 +365,7 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -381,12 +399,12 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+		svc.loginRunner = func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
 			return ctx.Err()
 		}
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -418,7 +436,7 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -470,7 +488,7 @@ func TestCodexService_GeneratePRInlineCommentsWithContext(t *testing.T) {
 			Verbose: true,
 		}
 
-		svc := NewCodexService(cfg)
+		svc := newTestCodexService(cfg)
 		svc.loginRunner = mockLoginRunner
 		svc.logoutRunner = mockLogoutRunner
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -509,11 +527,11 @@ func TestCodexService_CleanupBehavior(t *testing.T) {
 			Verbose: false,
 		}
 
-		svc := NewCodexService(cfg)
-		svc.loginRunner = func(ctx context.Context, apiKey string) error {
+		svc := newTestCodexService(cfg)
+		svc.loginRunner = func(ctx context.Context, apiKey, codexBinPath *string, env []string) error {
 			return nil
 		}
-		svc.logoutRunner = func(ctx context.Context) error {
+		svc.logoutRunner = func(ctx context.Context, codexBinPath *string, env []string) error {
 			return nil
 		}
 		svc.commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {

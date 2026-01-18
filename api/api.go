@@ -17,6 +17,8 @@ type Config struct {
 	AiApiKey     string
 	Verbose      bool
 	CI           bool
+	HomeDir      string
+	BinDir       string
 }
 type GeneratePRInlineCommentsOptions struct {
 	SandBoxDir, BaseSha, StartSha, HeadSha string
