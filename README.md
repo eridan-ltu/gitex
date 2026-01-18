@@ -54,10 +54,10 @@ go install github.com/user/gitex/cmd@latest
 gitex <pr-url> [flags]
 
 Flags:
-  -api-key         VCS API key (or use VCS_API_KEY env)
-  -gitlab-url      GitLab URL (default: https://gitlab.com)
-  -codex-model     Model to use (default: gpt-5.1-codex-mini)
-  -codex-api-key   OpenAI key (or use AI_API_KEY env)
+  -vcs-api-key     VCS API key (or use VCS_API_KEY env)
+  -vcs-url         VCS provider URL (for self-hosted instances)
+  -ai-model        Model to use (default: gpt-5.1-codex-mini)
+  -ai-api-key      OpenAI key (or use AI_API_KEY env)
   -verbose         Show what the AI is doing
 ```
 

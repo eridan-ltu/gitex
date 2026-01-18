@@ -94,7 +94,7 @@ func main() {
 
 func parseInput() (string, *api.Config) {
 	if len(os.Args) < 2 {
-		log.Fatalf("Usage: codex-gitlab <merge-request-url> [flags]\n")
+		log.Fatalf("Usage: gitex <pull-request-url> [flags]\n")
 	}
 	mrUrl := os.Args[1]
 
