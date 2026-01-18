@@ -85,7 +85,9 @@ func main() {
 	}
 
 	log.Println("Pushing comments to VCS")
-	vcsProviderService.SendInlineComments(comments, prInfo)
+	if err = vcsProviderService.SendInlineComments(comments, prInfo); err != nil {
+		log.Printf("Warning: %v", err)
+	}
 	log.Printf("Finished PR analysis at %s\n", prInfo.SourceBranch)
 
 }
@@ -98,16 +100,16 @@ func parseInput() (string, *api.Config) {
 
 	cfg := &api.Config{}
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fs.StringVar(&cfg.VcsApiKey, "api-key", "", "GitLab API Key")
-	fs.StringVar(&cfg.VcsRemoteUrl, "vcs-url", "https://gitlab.com", "GitLab URL")
-	fs.StringVar(&cfg.AiModel, "codex-model", "gpt-5.1-codex-mini", "Codex model")
-	fs.StringVar(&cfg.AiApiKey, "codex-api-key", "", "Codex API Key")
+	fs.StringVar(&cfg.VcsApiKey, "vcs-api-key", "", "VCS provider API Key")
+	fs.StringVar(&cfg.VcsRemoteUrl, "vcs-url", "", "VCS provider url")
+	fs.StringVar(&cfg.AiModel, "ai-model", "gpt-5.1-codex-mini", "Codex model")
+	fs.StringVar(&cfg.AiApiKey, "ai-api-key", "", "AI API Key")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")
 
 	fs.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <merge-request-url> [flags]\n\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <pull-request-url> [flags]\n\n", os.Args[0])
 		_, _ = fmt.Fprintf(os.Stderr, "Arguments:\n")
-		_, _ = fmt.Fprintf(os.Stderr, "  merge-request-url    Pull request URL\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  pull-request-url    Pull request URL\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}

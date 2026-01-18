@@ -7,7 +7,7 @@ import (
 
 type RemoteGitService interface {
 	GetPullRequestInfo(pullRequestURL *string) (*PullRequestInfo, error)
-	SendInlineComments(comments []*InlineComment, pullRequestInfo *PullRequestInfo)
+	SendInlineComments(comments []*InlineComment, pullRequestInfo *PullRequestInfo) error
 }
 
 type Config struct {

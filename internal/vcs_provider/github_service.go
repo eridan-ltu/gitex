@@ -20,6 +20,14 @@ type GitHubService struct {
 
 func NewGitHubService(cfg *api.Config) (*GitHubService, error) {
 	client := github.NewClient(nil).WithAuthToken(cfg.VcsApiKey)
+	if cfg.VcsRemoteUrl != "" {
+		uploadUrl := strings.TrimRight(cfg.VcsRemoteUrl, "/") + "/uploads"
+		enterpriseClient, err := client.WithEnterpriseURLs(cfg.VcsRemoteUrl, uploadUrl)
+		if err != nil {
+			return nil, fmt.Errorf("error initializing enterprise github client: %w", err)
+		}
+		client = enterpriseClient
+	}
 	return &GitHubService{
 		client: client,
 	}, nil
@@ -38,42 +46,54 @@ func (g *GitHubService) GetPullRequestInfo(pullRequestURL *string) (*api.PullReq
 		return nil, fmt.Errorf("failed to get merge request: %v", err)
 	}
 	cloneUrl := pr.Head.Repo.GetCloneURL()
-	projectName := pr.Base.Repo.GetName()
+	projectName := pr.Base.Repo.GetName() // pr is created against base project
 
 	return &api.PullRequestInfo{
 		HeadSha:        pr.Head.GetSHA(),
 		BaseSha:        pr.Base.GetSHA(),
 		ProjectName:    projectName,
 		ProjectHttpUrl: cloneUrl,
-		ProjectId:      pr.Base.Repo.GetID(),
+		ProjectId:      pr.Base.Repo.GetID(), //should not be used
 		SourceBranch:   pr.Head.GetRef(),
-		PullRequestId:  int64(pr.GetNumber()), //
+		PullRequestId:  int64(pr.GetNumber()), //github accepts pr number instead of internal id
 		Owner:          pr.Base.Repo.GetOwner().GetLogin(),
 	}, nil
 }
 
-func (g *GitHubService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	for i := range comments {
-		githubComment := g.convertApiComment(comments[i])
-		_, _, err := g.client.PullRequests.CreateComment(ctx, pullRequestInfo.Owner, pullRequestInfo.ProjectName, int(pullRequestInfo.PullRequestId), githubComment)
-		if err != nil {
-			log.Printf("failed to create pull request comment: %v", err)
+func (g *GitHubService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) error {
+	failed := util.WithRetry(comments, 3, func(comment *api.InlineComment) error {
+		githubComment := g.convertApiComment(comment)
+		if githubComment == nil {
+			return nil
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, resp, err := g.client.PullRequests.CreateComment(ctx, pullRequestInfo.Owner, pullRequestInfo.ProjectName, int(pullRequestInfo.PullRequestId), githubComment)
+		if resp != nil && resp.Rate.Remaining < 10 {
+			sleepDuration := time.Until(resp.Rate.Reset.Time) + time.Second
+			if sleepDuration > 0 {
+				log.Printf("rate limit low, sleeping for %v", sleepDuration)
+				time.Sleep(sleepDuration)
+			}
+		}
+		return err
+	})
+	if len(failed) > 0 {
+		return fmt.Errorf("failed to send %d comments after retries", len(failed))
 	}
+	return nil
 }
 
 func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) {
 	u, err := url.Parse(webUrl)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", 0, fmt.Errorf("failed to parse URL: %v", err)
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 
 	if len(parts) != 4 || parts[2] != "pull" {
-		return "", "", 0, errors.New("invalid GitHub pull request URL format")
+		return "", "", 0, errors.New("failed to parse URL")
 	}
 
 	owner := parts[0]
@@ -82,7 +102,7 @@ func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) 
 
 	num, err := strconv.Atoi(number)
 	if err != nil {
-		return "", "", 0, errors.New("pull request number is not numeric")
+		return "", "", 0, fmt.Errorf("failed to parse pull request number: %v", err)
 	}
 
 	return owner, repo, num, nil

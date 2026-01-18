@@ -3,8 +3,8 @@ package vcs_provider
 import (
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
-	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,7 +15,8 @@ type GitLabService struct {
 }
 
 func NewGitLabService(cfg *api.Config) (*GitLabService, error) {
-	clientOptionFunc := gitlab.WithBaseURL(cfg.VcsRemoteUrl)
+	baseUrl := util.GetOrDefault(&cfg.VcsRemoteUrl, "https://gitlab.com/")
+	clientOptionFunc := gitlab.WithBaseURL(baseUrl)
 	client, err := gitlab.NewClient(cfg.VcsApiKey, clientOptionFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitLab client: %w", err)
@@ -53,14 +54,19 @@ func (g *GitLabService) GetPullRequestInfo(pullRequestURL *string) (*api.PullReq
 	}, nil
 }
 
-func (g *GitLabService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) {
-	for i := range comments {
-		gitlabComment := convertApiComment(comments[i])
-		_, _, err := g.client.Discussions.CreateMergeRequestDiscussion(pullRequestInfo.ProjectPath, pullRequestInfo.PullRequestId, gitlabComment)
-		if err != nil {
-			log.Printf("failed to create merge request discussion: %v", err)
+func (g *GitLabService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) error {
+	failed := util.WithRetry(comments, 3, func(comment *api.InlineComment) error {
+		gitlabComment := convertApiComment(comment)
+		if gitlabComment == nil {
+			return nil
 		}
+		_, _, err := g.client.Discussions.CreateMergeRequestDiscussion(pullRequestInfo.ProjectPath, pullRequestInfo.PullRequestId, gitlabComment)
+		return err
+	})
+	if len(failed) > 0 {
+		return fmt.Errorf("failed to send %d comments after retries", len(failed))
 	}
+	return nil
 }
 
 func parseWebUrl(webUrl string) (string, int, error) {

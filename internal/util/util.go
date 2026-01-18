@@ -2,8 +2,10 @@ package util
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
+	"time"
 )
 
 func Ptr[T any](v T) *T {
@@ -31,4 +33,29 @@ func EnsureDirectoryWritable(dir string) error {
 	_ = os.Remove(testFile)
 
 	return nil
+}
+
+func WithRetry[T any](items []T, maxRetries int, fn func(T) error) []T {
+	pending := items
+	for attempt := 0; attempt <= maxRetries && len(pending) > 0; attempt++ {
+		if attempt > 0 {
+			log.Printf("retrying %d failed items (attempt %d/%d)", len(pending), attempt, maxRetries)
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+		var failed []T
+		for _, item := range pending {
+			if err := fn(item); err != nil {
+				failed = append(failed, item)
+			}
+		}
+		pending = failed
+	}
+	return pending
+}
+
+func GetOrDefault(v *string, d string) string {
+	if v == nil || *v == "" {
+		return d
+	}
+	return *v
 }

@@ -31,7 +31,7 @@ func TestCreateAiAgentService(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		kind        AIAgentType
+		kind        api.AIAgentType
 		expectError bool
 	}{
 		{
@@ -41,12 +41,12 @@ func TestCreateAiAgentService(t *testing.T) {
 		},
 		{
 			name:        "invalid type",
-			kind:        AIAgentType("invalid"),
+			kind:        api.AIAgentType("invalid"),
 			expectError: true,
 		},
 		{
 			name:        "empty type",
-			kind:        AIAgentType(""),
+			kind:        api.AIAgentType(""),
 			expectError: true,
 		},
 	}
@@ -82,7 +82,7 @@ func TestCreateVersionControlService(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		kind        VersionControlType
+		kind        api.VersionControlType
 		expectError bool
 	}{
 		{
@@ -92,12 +92,12 @@ func TestCreateVersionControlService(t *testing.T) {
 		},
 		{
 			name:        "invalid type",
-			kind:        VersionControlType("svn"),
+			kind:        api.VersionControlType("svn"),
 			expectError: true,
 		},
 		{
 			name:        "empty type",
-			kind:        VersionControlType(""),
+			kind:        api.VersionControlType(""),
 			expectError: true,
 		},
 	}
@@ -131,7 +131,7 @@ func TestCreateRemoteGitService(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		kind        VCSProviderType
+		kind        api.VCSProviderType
 		expectError bool
 	}{
 		{
@@ -140,9 +140,9 @@ func TestCreateRemoteGitService(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "github type - not yet implemented",
+			name:        "github type",
 			kind:        VCSProviderTypeGithub,
-			expectError: true,
+			expectError: false,
 		},
 		{
 			name:        "unknown type",
@@ -151,7 +151,7 @@ func TestCreateRemoteGitService(t *testing.T) {
 		},
 		{
 			name:        "empty type",
-			kind:        VCSProviderType(""),
+			kind:        api.VCSProviderType(""),
 			expectError: true,
 		},
 	}
@@ -185,7 +185,7 @@ func TestDetectRemoteGitServiceType(t *testing.T) {
 	tests := []struct {
 		name        string
 		url         string
-		expected    VCSProviderType
+		expected    api.VCSProviderType
 		expectError bool
 	}{
 		{
@@ -243,7 +243,7 @@ func TestDetectRemoteGitServiceType(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "unsupported service - still has log.Fatalf",
+			name:        "unsupported service",
 			url:         "https://bitbucket.org/user/repo",
 			expected:    VCSProviderTypeUnknown,
 			expectError: false,
