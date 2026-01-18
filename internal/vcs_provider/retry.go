@@ -22,7 +22,7 @@ func RetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, err
 	}
 
 	if resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0" {
-		log.Printf("rate limited (status %d), will retry", resp.StatusCode)
+		log.Printf("rate limited (status 403), will retry")
 		return true, nil
 	}
 
