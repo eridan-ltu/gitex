@@ -1,4 +1,4 @@
-package internal
+package ai
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
 	"os"
 	"os/exec"
 	"path"
@@ -47,12 +48,12 @@ type CodexService struct {
 }
 
 func NewCodexService(cfg *api.Config) (*CodexService, error) {
-	if err := ensureDirectoryWritable(cfg.BinDir); err != nil {
+	if err := util.EnsureDirectoryWritable(cfg.BinDir); err != nil {
 		return nil, fmt.Errorf("bin directory error: %w", err)
 	}
 
 	codexHomePath := path.Join(cfg.HomeDir, ".codex")
-	if err := ensureDirectoryWritable(codexHomePath); err != nil {
+	if err := util.EnsureDirectoryWritable(codexHomePath); err != nil {
 		return nil, fmt.Errorf("codex home directory error: %w", err)
 	}
 

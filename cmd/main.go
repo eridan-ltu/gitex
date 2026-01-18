@@ -20,18 +20,18 @@ func main() {
 
 	serviceFactory := internal.NewServiceFactory(cfg)
 
-	remoteGitServiceType, err := serviceFactory.DetectRemoteGitServiceType(mrUrl)
+	vcsProviderType, err := serviceFactory.DetectVCSProviderType(mrUrl)
 	if err != nil {
-		log.Fatalf("Failed to detect remote git service type: %v", err)
+		log.Fatalf("Failed to detect VCS provider type: %v", err)
 	}
-	log.Printf("Remote Git Service Type: %s\n", remoteGitServiceType)
+	log.Printf("VCS provider type: %s\n", vcsProviderType)
 
-	remoteGitService, err := serviceFactory.CreateRemoteGitService(remoteGitServiceType)
+	vcsProviderService, err := serviceFactory.CreateVCSProvider(vcsProviderType)
 	if err != nil {
-		log.Fatalf("Failed to create remote git service: %v", err)
+		log.Fatalf("Failed to create VCS provider service: %v", err)
 	}
 
-	prInfo, err := remoteGitService.GetPullRequestInfo(&mrUrl)
+	prInfo, err := vcsProviderService.GetPullRequestInfo(&mrUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func main() {
 		}
 	}()
 
-	gitService, err := serviceFactory.CreateVersionControlService(internal.VersionControlTypeGit)
+	gitService, err := serviceFactory.CreateVersionControlService(internal.VCSTypeGit)
 	if err != nil {
 		log.Fatalf("Failed to create version control service: %v", err)
 	}
@@ -85,7 +85,7 @@ func main() {
 	}
 
 	log.Println("Pushing comments to VCS")
-	remoteGitService.SendInlineComments(comments, prInfo)
+	vcsProviderService.SendInlineComments(comments, prInfo)
 	log.Printf("Finished PR analysis at %s\n", prInfo.SourceBranch)
 
 }

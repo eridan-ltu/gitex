@@ -87,7 +87,7 @@ func TestCreateVersionControlService(t *testing.T) {
 	}{
 		{
 			name:        "valid git type",
-			kind:        VersionControlTypeGit,
+			kind:        VCSTypeGit,
 			expectError: false,
 		},
 		{
@@ -131,34 +131,34 @@ func TestCreateRemoteGitService(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		kind        RemoteGitServiceType
+		kind        VCSProviderType
 		expectError bool
 	}{
 		{
 			name:        "valid gitlab type",
-			kind:        RemoteGitServiceTypeGitLab,
+			kind:        VCSProviderTypeGitlab,
 			expectError: false,
 		},
 		{
 			name:        "github type - not yet implemented",
-			kind:        RemoteGitServiceTypeGitHub,
+			kind:        VCSProviderTypeGithub,
 			expectError: true,
 		},
 		{
 			name:        "unknown type",
-			kind:        RemoteGitServiceTypeUnknown,
+			kind:        VCSProviderTypeUnknown,
 			expectError: true,
 		},
 		{
 			name:        "empty type",
-			kind:        RemoteGitServiceType(""),
+			kind:        VCSProviderType(""),
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := factory.CreateRemoteGitService(tt.kind)
+			svc, err := factory.CreateVCSProvider(tt.kind)
 
 			if tt.expectError {
 				if err == nil {
@@ -185,49 +185,49 @@ func TestDetectRemoteGitServiceType(t *testing.T) {
 	tests := []struct {
 		name        string
 		url         string
-		expected    RemoteGitServiceType
+		expected    VCSProviderType
 		expectError bool
 	}{
 		{
 			name:        "github.com host",
 			url:         "https://github.com/user/repo",
-			expected:    RemoteGitServiceTypeGitHub,
+			expected:    VCSProviderTypeGithub,
 			expectError: false,
 		},
 		{
 			name:        "github.com with pull request",
 			url:         "https://github.com/user/repo/pull/123",
-			expected:    RemoteGitServiceTypeGitHub,
+			expected:    VCSProviderTypeGithub,
 			expectError: false,
 		},
 		{
 			name:        "gitlab merge request",
 			url:         "https://gitlab.com/user/repo/-/merge_requests/123",
-			expected:    RemoteGitServiceTypeGitLab,
+			expected:    VCSProviderTypeGitlab,
 			expectError: false,
 		},
 		{
 			name:        "self-hosted gitlab",
 			url:         "https://gitlab.example.com/user/repo/-/merge_requests/456",
-			expected:    RemoteGitServiceTypeGitLab,
+			expected:    VCSProviderTypeGitlab,
 			expectError: false,
 		},
 		{
 			name:        "case insensitive github",
 			url:         "https://GitHub.COM/user/repo",
-			expected:    RemoteGitServiceTypeGitHub,
+			expected:    VCSProviderTypeGithub,
 			expectError: false,
 		},
 		{
 			name:        "case insensitive merge request path",
 			url:         "https://example.com/user/repo/-/MERGE_REQUESTS/123",
-			expected:    RemoteGitServiceTypeGitLab,
+			expected:    VCSProviderTypeGitlab,
 			expectError: false,
 		},
 		{
 			name:        "non-github pull request",
 			url:         "https://example.com/user/repo/pull/123",
-			expected:    RemoteGitServiceTypeGitHub,
+			expected:    VCSProviderTypeGithub,
 			expectError: false,
 		},
 		{
@@ -245,7 +245,7 @@ func TestDetectRemoteGitServiceType(t *testing.T) {
 		{
 			name:        "unsupported service - still has log.Fatalf",
 			url:         "https://bitbucket.org/user/repo",
-			expected:    RemoteGitServiceTypeUnknown,
+			expected:    VCSProviderTypeUnknown,
 			expectError: false,
 		},
 	}
@@ -253,7 +253,7 @@ func TestDetectRemoteGitServiceType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			result, err := factory.DetectRemoteGitServiceType(tt.url)
+			result, err := factory.DetectVCSProviderType(tt.url)
 
 			if tt.expectError {
 				if err == nil {

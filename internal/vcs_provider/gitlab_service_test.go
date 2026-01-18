@@ -1,4 +1,4 @@
-package internal
+package vcs_provider
 
 import (
 	"fmt"

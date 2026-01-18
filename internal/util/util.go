@@ -1,4 +1,4 @@
-package internal
+package util
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ func Ptr[T any](v T) *T {
 	return &v
 }
 
-func ensureDirectoryWritable(dir string) error {
+func EnsureDirectoryWritable(dir string) error {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
 		return os.MkdirAll(dir, 0755)
