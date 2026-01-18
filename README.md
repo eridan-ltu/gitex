@@ -73,18 +73,22 @@ Flags:
 
 1. Parses the PR URL to figure out the project and MR
 2. Clones the source branch to a temp directory
-3. Installs Codex CLI if needed (`npm i @openai/codex@0.87.0` into `~/.gitex/bin`)
+3. Installs [Codex CLI](https://github.com/openai/codex) if needed (`npm i @openai/codex@0.87.0` into `~/.gitex/bin`)
 4. Runs `git diff` against the target branch
 5. Sends the diff to Codex with review instructions
-6. Parses the response and posts inline comments (with retry on failure)
+6. Parses the response and posts inline comments
 
-Codex runs sandboxed with its own home directory (`~/.gitex/.codex`) to avoid conflicts with your local Codex config.
+gitex respects `GITEX_HOME` env variable in case you wanna change the home dir.
+
+AI agent tool runs sandboxed with its own home directory (`~/.gitex/.codex`) to avoid conflicts with your local Codex config.
 
 The AI is prompted to trace code paths and gather evidence before flagging something. It classifies issues as definite, possible, or safe - and only comments when there's a real concern.
 
 ## Roadmap
 
-- Claude support (coming soon)
+- Claude support
+- Overview mode. Overall changes splitted by factors, eg readability, complexity, sloppiness :D, etc...
+- Externalized template in home dir for both modes (inline review and overview)
 
 ## Contributing
 
