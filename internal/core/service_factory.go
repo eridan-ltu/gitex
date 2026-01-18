@@ -76,7 +76,7 @@ func (a *ServiceFactory) CreateVCSProvider(kind api.VCSProviderType) (api.Remote
 func (a *ServiceFactory) DetectVCSProviderType(rawURL string) (api.VCSProviderType, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse url %s: %v", rawURL, err)
+		return "", fmt.Errorf("failed to parse url %s: %w", rawURL, err)
 	}
 
 	host := strings.ToLower(u.Host)

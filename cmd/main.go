@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -12,7 +13,14 @@ import (
 )
 
 func main() {
-	mrUrl, cfg := parseInput()
+	mrUrl, cfg, err := parseInput(os.Args[1:])
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+
+	if err := populateFromEnv(cfg); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	factory := core.NewServiceFactory(cfg)
 	app := core.NewApp(factory)
@@ -21,14 +29,14 @@ func main() {
 	}
 }
 
-func parseInput() (string, *api.Config) {
-	if len(os.Args) < 2 {
-		log.Fatalf("Usage: gitex <pull-request-url> [flags]")
+func parseInput(args []string) (string, *api.Config, error) {
+	if len(args) < 1 {
+		return "", nil, errors.New("usage: gitex <pull-request-url> [flags]")
 	}
-	mrUrl := os.Args[1]
+	mrUrl := args[0]
 
 	cfg := &api.Config{}
-	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	fs := flag.NewFlagSet("gitex", flag.ContinueOnError)
 	fs.StringVar(&cfg.VcsApiKey, "vcs-api-key", "", "VCS provider API Key")
 	fs.StringVar(&cfg.VcsRemoteUrl, "vcs-url", "", "VCS provider url")
 	fs.StringVar(&cfg.AiModel, "ai-model", "gpt-5.1-codex-mini", "Codex model")
@@ -36,34 +44,32 @@ func parseInput() (string, *api.Config) {
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")
 
 	fs.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <pull-request-url> [flags]\n\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: gitex <pull-request-url> [flags]\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Arguments:\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  pull-request-url    Pull request URL\n\n")
 		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
 
-	if err := fs.Parse(os.Args[2:]); err != nil {
-		log.Fatalf("Failed to parse flags: %v", err)
+	if err := fs.Parse(args[1:]); err != nil {
+		return "", nil, fmt.Errorf("failed to parse flags: %w", err)
 	}
 
-	populateFromEnv(cfg)
-
-	return mrUrl, cfg
+	return mrUrl, cfg, nil
 }
 
-func populateFromEnv(cfg *api.Config) {
+func populateFromEnv(cfg *api.Config) error {
 	if cfg.VcsApiKey == "" {
 		cfg.VcsApiKey = os.Getenv("VCS_API_KEY")
 		if cfg.VcsApiKey == "" {
-			log.Fatal("vcs-api-key is not set. Provide it as an argument or set VCS_API_KEY environment variable")
+			return errors.New("vcs-api-key is not set. Provide it as an argument or set VCS_API_KEY environment variable")
 		}
 	}
 
 	if cfg.AiApiKey == "" {
 		cfg.AiApiKey = os.Getenv("AI_API_KEY")
 		if cfg.AiApiKey == "" {
-			log.Fatal("ai-api-key is not set. Provide it as an argument or set AI_API_KEY environment variable")
+			return errors.New("ai-api-key is not set. Provide it as an argument or set AI_API_KEY environment variable")
 		}
 	}
 
@@ -72,9 +78,10 @@ func populateFromEnv(cfg *api.Config) {
 	if cfg.HomeDir == "" {
 		dir, err := os.UserHomeDir()
 		if err != nil {
-			log.Fatalf("Failed to get home dir: %v", err)
+			return fmt.Errorf("failed to get home dir: %w", err)
 		}
 		cfg.HomeDir = filepath.Join(dir, ".gitex")
 	}
 	cfg.BinDir = filepath.Join(cfg.HomeDir, "bin")
+	return nil
 }

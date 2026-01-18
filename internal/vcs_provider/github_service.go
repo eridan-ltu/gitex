@@ -76,14 +76,14 @@ func githubRetryPolicy(ctx context.Context, resp *http.Response, err error) (boo
 func (g *GitHubService) GetPullRequestInfo(pullRequestURL *string) (*api.PullRequestInfo, error) {
 	owner, repo, number, err := g.parseWebUrl(*pullRequestURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse pull request URL: %v", err)
+		return nil, fmt.Errorf("failed to parse pull request URL: %w", err)
 	}
 	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancelFunc()
 
 	pr, _, err := g.client.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get merge request: %v", err)
+		return nil, fmt.Errorf("failed to get merge request: %w", err)
 	}
 	cloneUrl := pr.Head.Repo.GetCloneURL()
 	projectName := pr.Base.Repo.GetName() // pr is created against base project
@@ -143,7 +143,7 @@ func (g *GitHubService) logGithubError(githubComment *github.PullRequestComment,
 func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) {
 	u, err := url.Parse(webUrl)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("failed to parse URL: %v", err)
+		return "", "", 0, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -158,7 +158,7 @@ func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) 
 
 	num, err := strconv.Atoi(number)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("failed to parse pull request number: %v", err)
+		return "", "", 0, fmt.Errorf("failed to parse pull request number: %w", err)
 	}
 
 	return owner, repo, num, nil
