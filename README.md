@@ -4,6 +4,8 @@
   <a href="https://github.com/eridan-ltu/gitex/actions/workflows/ci.yml"><img src="https://github.com/eridan-ltu/gitex/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/eridan-ltu/gitex/releases"><img src="https://img.shields.io/github/v/release/eridan-ltu/gitex" alt="Release"></a>
   <a href="https://goreportcard.com/report/github.com/eridan-ltu/gitex"><img src="https://goreportcard.com/badge/github.com/eridan-ltu/gitex" alt="Go Report Card"></a>
+  <a href="https://codecov.io/gh/eridan-ltu/gitex"><img src="https://codecov.io/gh/eridan-ltu/gitex/branch/main/graph/badge.svg" alt="Coverage"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/eridan-ltu/gitex" alt="Go Version">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
