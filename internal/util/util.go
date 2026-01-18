@@ -59,3 +59,11 @@ func GetOrDefault(v *string, d string) string {
 	}
 	return *v
 }
+
+// GetOrDefaultInt returns the value of the pointer or the default if nil
+func GetOrDefaultInt(v *int, d int) int {
+	if v == nil {
+		return d
+	}
+	return *v
+}
