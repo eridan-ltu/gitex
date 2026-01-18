@@ -1,8 +1,9 @@
-package internal
+package core
 
 import (
-	"github.com/eridan-ltu/gitex/api"
 	"testing"
+
+	"github.com/eridan-ltu/gitex/api"
 )
 
 func TestNewServiceFactory(t *testing.T) {
@@ -252,7 +253,6 @@ func TestDetectRemoteGitServiceType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			result, err := factory.DetectVCSProviderType(tt.url)
 
 			if tt.expectError {

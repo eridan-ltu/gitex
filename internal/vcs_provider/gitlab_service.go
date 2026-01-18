@@ -1,13 +1,15 @@
 package vcs_provider
 
 import (
+	"errors"
 	"fmt"
-	"github.com/eridan-ltu/gitex/api"
-	"github.com/eridan-ltu/gitex/internal/util"
-	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 type GitLabService struct {
@@ -29,15 +31,15 @@ func NewGitLabService(cfg *api.Config) (*GitLabService, error) {
 func (g *GitLabService) GetPullRequestInfo(pullRequestURL *string) (*api.PullRequestInfo, error) {
 	projectPath, mrId, err := g.parseWebUrl(*pullRequestURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse merge request URL: %v", err)
+		return nil, fmt.Errorf("failed to parse merge request URL: %w", err)
 	}
 	mr, _, err := g.client.MergeRequests.GetMergeRequest(projectPath, int64(mrId), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get merge request: %v", err)
+		return nil, fmt.Errorf("failed to get merge request: %w", err)
 	}
 	project, _, err := g.client.Projects.GetProject(mr.ProjectID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project: %v", err)
+		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 
 	return &api.PullRequestInfo{
@@ -86,7 +88,7 @@ func (g *GitLabService) parseWebUrl(webUrl string) (string, int, error) {
 	}
 
 	if mrIndex == -1 || mrIndex+1 >= len(parts) {
-		return "", 0, fmt.Errorf("invalid Merge Request URL format")
+		return "", 0, errors.New("invalid Merge Request URL format")
 	}
 
 	projectPath := strings.Join(parts[1:mrIndex-1], "/")

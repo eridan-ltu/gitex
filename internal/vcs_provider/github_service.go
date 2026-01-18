@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/eridan-ltu/gitex/api"
-	"github.com/eridan-ltu/gitex/internal/util"
-	"github.com/google/go-github/v81/github"
 	"log"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
+	"github.com/google/go-github/v81/github"
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 type GitHubService struct {
@@ -19,7 +22,15 @@ type GitHubService struct {
 }
 
 func NewGitHubService(cfg *api.Config) (*GitHubService, error) {
-	client := github.NewClient(nil).WithAuthToken(cfg.VcsApiKey)
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.Logger = nil
+	retryClient.CheckRetry = githubRetryPolicy
+	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
+
+	httpClient := retryClient.StandardClient()
+
+	client := github.NewClient(httpClient).WithAuthToken(cfg.VcsApiKey)
 	if cfg.VcsRemoteUrl != "" {
 		uploadUrl := strings.TrimRight(cfg.VcsRemoteUrl, "/") + "/uploads"
 		enterpriseClient, err := client.WithEnterpriseURLs(cfg.VcsRemoteUrl, uploadUrl)
@@ -33,17 +44,46 @@ func NewGitHubService(cfg *api.Config) (*GitHubService, error) {
 	}, nil
 }
 
+func githubRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	if err != nil {
+		log.Printf("connection error, will retry: %v", err)
+		return true, nil
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests ||
+		(resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0") {
+		log.Printf("rate limited (status %d), will retry", resp.StatusCode)
+		return true, nil
+	}
+
+	if resp.StatusCode >= 500 && resp.StatusCode != 501 {
+		log.Printf("server error %d, will retry", resp.StatusCode)
+		return true, nil
+	}
+
+	if resp.StatusCode >= 400 {
+		log.Printf("client error %d - not retrying", resp.StatusCode)
+		return false, nil
+	}
+
+	return false, nil
+}
+
 func (g *GitHubService) GetPullRequestInfo(pullRequestURL *string) (*api.PullRequestInfo, error) {
 	owner, repo, number, err := g.parseWebUrl(*pullRequestURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse pull request URL: %v", err)
+		return nil, fmt.Errorf("failed to parse pull request URL: %w", err)
 	}
 	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancelFunc()
 
 	pr, _, err := g.client.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get merge request: %v", err)
+		return nil, fmt.Errorf("failed to get merge request: %w", err)
 	}
 	cloneUrl := pr.Head.Repo.GetCloneURL()
 	projectName := pr.Base.Repo.GetName() // pr is created against base project
@@ -61,33 +101,49 @@ func (g *GitHubService) GetPullRequestInfo(pullRequestURL *string) (*api.PullReq
 }
 
 func (g *GitHubService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) error {
-	failed := util.WithRetry(comments, 3, func(comment *api.InlineComment) error {
+	var failedCount int
+
+	for _, comment := range comments {
 		githubComment := g.convertApiComment(comment)
 		if githubComment == nil {
-			return nil
+			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_, resp, err := g.client.PullRequests.CreateComment(ctx, pullRequestInfo.Owner, pullRequestInfo.ProjectName, int(pullRequestInfo.PullRequestId), githubComment)
-		if resp != nil && resp.Rate.Remaining < 10 {
-			sleepDuration := time.Until(resp.Rate.Reset.Time) + time.Second
-			if sleepDuration > 0 {
-				log.Printf("rate limit low, sleeping for %v", sleepDuration)
-				time.Sleep(sleepDuration)
-			}
+		_, _, err := g.client.PullRequests.CreateComment(ctx, pullRequestInfo.Owner, pullRequestInfo.ProjectName, int(pullRequestInfo.PullRequestId), githubComment)
+		cancel()
+
+		if err != nil {
+			g.logGithubError(githubComment, err)
+			failedCount++
 		}
-		return err
-	})
-	if len(failed) > 0 {
-		return fmt.Errorf("failed to send %d comments after retries", len(failed))
+	}
+
+	if failedCount > 0 {
+		return fmt.Errorf("failed to send %d comments", failedCount)
 	}
 	return nil
+}
+
+func (g *GitHubService) logGithubError(githubComment *github.PullRequestComment, err error) {
+	path := util.GetOrDefault(githubComment.Path, "unknown")
+	line := util.GetOrDefaultInt(githubComment.Line, 0)
+
+	var ghErr *github.ErrorResponse
+	if errors.As(err, &ghErr) {
+		log.Printf("failed to create comment on %s:%d: %s (status %d)",
+			path, line, ghErr.Message, ghErr.Response.StatusCode)
+		for _, e := range ghErr.Errors {
+			log.Printf("  - %s.%s: %s (%s)", e.Resource, e.Field, e.Message, e.Code)
+		}
+	} else {
+		log.Printf("failed to create comment on %s:%d: %v", path, line, err)
+	}
 }
 
 func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) {
 	u, err := url.Parse(webUrl)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("failed to parse URL: %v", err)
+		return "", "", 0, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -102,7 +158,7 @@ func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) 
 
 	num, err := strconv.Atoi(number)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("failed to parse pull request number: %v", err)
+		return "", "", 0, fmt.Errorf("failed to parse pull request number: %w", err)
 	}
 
 	return owner, repo, num, nil

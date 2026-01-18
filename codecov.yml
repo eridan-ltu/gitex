@@ -1,0 +1,8 @@
+comment:
+  layout: " diff, flags, files"
+  behavior: default
+  require_changes: true
+  require_base: true
+  require_head: true
+  hide_project_coverage: false
+  require_ci_to_pass: true
