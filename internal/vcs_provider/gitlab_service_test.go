@@ -2,12 +2,14 @@ package vcs_provider
 
 import (
 	"fmt"
-	"github.com/eridan-ltu/gitex/api"
-	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/eridan-ltu/gitex/api"
+	"github.com/eridan-ltu/gitex/internal/util"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 func TestNewGitLabService(t *testing.T) {
@@ -38,7 +40,7 @@ func TestNewGitLabService(t *testing.T) {
 				VcsApiKey:    "",
 				VcsRemoteUrl: "https://gitlab.com",
 			},
-			expectError: false, // GitLab client may allow empty token
+			expectError: false,
 		},
 	}
 
@@ -68,7 +70,7 @@ func TestNewGitLabService(t *testing.T) {
 	}
 }
 
-func TestParseWebUrl(t *testing.T) {
+func TestGitLabService_parseWebUrl(t *testing.T) {
 	svc := &GitLabService{}
 
 	tests := []struct {
@@ -83,49 +85,42 @@ func TestParseWebUrl(t *testing.T) {
 			url:             "https://gitlab.com/user/project/-/merge_requests/123",
 			expectedProject: "user/project",
 			expectedMRId:    123,
-			expectError:     false,
 		},
 		{
 			name:            "valid nested project path",
 			url:             "https://gitlab.com/group/subgroup/project/-/merge_requests/456",
 			expectedProject: "group/subgroup/project",
 			expectedMRId:    456,
-			expectError:     false,
 		},
 		{
 			name:            "valid self-hosted gitlab",
 			url:             "https://gitlab.example.com/team/repo/-/merge_requests/789",
 			expectedProject: "team/repo",
 			expectedMRId:    789,
-			expectError:     false,
 		},
 		{
 			name:            "deeply nested project",
 			url:             "https://gitlab.com/org/team/subteam/project/-/merge_requests/1",
 			expectedProject: "org/team/subteam/project",
 			expectedMRId:    1,
-			expectError:     false,
 		},
 		{
 			name:            "MR URL with diffs tab",
 			url:             "https://gitlab.com/user/project/-/merge_requests/123/diffs",
 			expectedProject: "user/project",
 			expectedMRId:    123,
-			expectError:     false,
 		},
 		{
 			name:            "MR URL with commits tab",
 			url:             "https://gitlab.com/user/project/-/merge_requests/123/commits",
 			expectedProject: "user/project",
 			expectedMRId:    123,
-			expectError:     false,
 		},
 		{
 			name:            "MR URL with pipelines tab",
 			url:             "https://gitlab.com/user/project/-/merge_requests/123/pipelines",
 			expectedProject: "user/project",
 			expectedMRId:    123,
-			expectError:     false,
 		},
 		{
 			name:        "invalid URL format - missing merge_requests",
@@ -157,16 +152,17 @@ func TestParseWebUrl(t *testing.T) {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if projectPath != tt.expectedProject {
-					t.Errorf("expected project path %s, got %s", tt.expectedProject, projectPath)
-				}
-				if mrId != tt.expectedMRId {
-					t.Errorf("expected MR ID %d, got %d", tt.expectedMRId, mrId)
-				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if projectPath != tt.expectedProject {
+				t.Errorf("expected project path %q, got %q", tt.expectedProject, projectPath)
+			}
+			if mrId != tt.expectedMRId {
+				t.Errorf("expected MR ID %d, got %d", tt.expectedMRId, mrId)
 			}
 		})
 	}
@@ -174,57 +170,44 @@ func TestParseWebUrl(t *testing.T) {
 
 func TestConvertApiComment(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    *api.InlineComment
-		expected *gitlab.CreateMergeRequestDiscussionOptions
+		name       string
+		input      *api.InlineComment
+		wantNil    bool
+		wantBody   string
+		wantCommit string
 	}{
 		{
-			name:     "nil comment",
-			input:    nil,
-			expected: nil,
+			name:    "nil comment",
+			input:   nil,
+			wantNil: true,
 		},
 		{
 			name: "comment with all fields",
 			input: &api.InlineComment{
-				Body:      gitlab.Ptr("Test comment"),
-				CommitID:  gitlab.Ptr("abc123"),
+				Body:      util.Ptr("Test comment"),
+				CommitID:  util.Ptr("abc123"),
 				CreatedAt: &time.Time{},
 				Position: &api.InlineCommentPosition{
-					BaseSha:      gitlab.Ptr("base123"),
-					HeadSha:      gitlab.Ptr("head123"),
-					StartSha:     gitlab.Ptr("start123"),
-					NewPath:      gitlab.Ptr("file.go"),
-					OldPath:      gitlab.Ptr("file.go"),
-					PositionType: gitlab.Ptr("text"),
-					NewLine:      gitlab.Ptr(int64(10)),
-					OldLine:      gitlab.Ptr(int64(5)),
+					BaseSha:      util.Ptr("base123"),
+					HeadSha:      util.Ptr("head123"),
+					StartSha:     util.Ptr("start123"),
+					NewPath:      util.Ptr("file.go"),
+					OldPath:      util.Ptr("file.go"),
+					PositionType: util.Ptr("text"),
+					NewLine:      util.Ptr(int64(10)),
+					OldLine:      util.Ptr(int64(5)),
 				},
 			},
-			expected: &gitlab.CreateMergeRequestDiscussionOptions{
-				Body:     gitlab.Ptr("Test comment"),
-				CommitID: gitlab.Ptr("abc123"),
-				Position: &gitlab.PositionOptions{
-					BaseSHA:      gitlab.Ptr("base123"),
-					HeadSHA:      gitlab.Ptr("head123"),
-					StartSHA:     gitlab.Ptr("start123"),
-					NewPath:      gitlab.Ptr("file.go"),
-					OldPath:      gitlab.Ptr("file.go"),
-					PositionType: gitlab.Ptr("text"),
-					NewLine:      gitlab.Ptr(int64(10)),
-					OldLine:      gitlab.Ptr(int64(5)),
-				},
-			},
+			wantBody:   "Test comment",
+			wantCommit: "abc123",
 		},
 		{
 			name: "comment with nil position",
 			input: &api.InlineComment{
-				Body:     gitlab.Ptr("Simple comment"),
+				Body:     util.Ptr("Simple comment"),
 				Position: nil,
 			},
-			expected: &gitlab.CreateMergeRequestDiscussionOptions{
-				Body:     gitlab.Ptr("Simple comment"),
-				Position: nil,
-			},
+			wantBody: "Simple comment",
 		},
 	}
 
@@ -232,18 +215,18 @@ func TestConvertApiComment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := convertApiComment(tt.input)
 
-			if tt.expected == nil && result != nil {
-				t.Error("expected nil result")
-			}
-			if tt.expected != nil && result == nil {
-				t.Error("expected non-nil result")
-			}
-			if tt.expected != nil && result != nil {
-				if tt.expected.Body != nil && result.Body != nil {
-					if *tt.expected.Body != *result.Body {
-						t.Errorf("expected body %s, got %s", *tt.expected.Body, *result.Body)
-					}
+			if tt.wantNil {
+				if result != nil {
+					t.Error("expected nil result")
 				}
+				return
+			}
+
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+			if result.Body != nil && *result.Body != tt.wantBody {
+				t.Errorf("body = %q, want %q", *result.Body, tt.wantBody)
 			}
 		})
 	}
@@ -251,75 +234,46 @@ func TestConvertApiComment(t *testing.T) {
 
 func TestConvertInlineCommentPosition(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    *api.InlineCommentPosition
-		expected *gitlab.PositionOptions
+		name    string
+		input   *api.InlineCommentPosition
+		wantNil bool
 	}{
 		{
-			name:     "nil position",
-			input:    nil,
-			expected: nil,
+			name:    "nil position",
+			input:   nil,
+			wantNil: true,
 		},
 		{
 			name: "complete position",
 			input: &api.InlineCommentPosition{
-				BaseSha:      gitlab.Ptr("base"),
-				HeadSha:      gitlab.Ptr("head"),
-				StartSha:     gitlab.Ptr("start"),
-				NewPath:      gitlab.Ptr("new.go"),
-				OldPath:      gitlab.Ptr("old.go"),
-				PositionType: gitlab.Ptr("text"),
-				NewLine:      gitlab.Ptr(int64(20)),
-				OldLine:      gitlab.Ptr(int64(15)),
-			},
-			expected: &gitlab.PositionOptions{
-				BaseSHA:      gitlab.Ptr("base"),
-				HeadSHA:      gitlab.Ptr("head"),
-				StartSHA:     gitlab.Ptr("start"),
-				NewPath:      gitlab.Ptr("new.go"),
-				OldPath:      gitlab.Ptr("old.go"),
-				PositionType: gitlab.Ptr("text"),
-				NewLine:      gitlab.Ptr(int64(20)),
-				OldLine:      gitlab.Ptr(int64(15)),
+				BaseSha:      util.Ptr("base"),
+				HeadSha:      util.Ptr("head"),
+				StartSha:     util.Ptr("start"),
+				NewPath:      util.Ptr("new.go"),
+				OldPath:      util.Ptr("old.go"),
+				PositionType: util.Ptr("text"),
+				NewLine:      util.Ptr(int64(20)),
+				OldLine:      util.Ptr(int64(15)),
 			},
 		},
 		{
 			name: "position with line range",
 			input: &api.InlineCommentPosition{
-				BaseSha:      gitlab.Ptr("base"),
-				HeadSha:      gitlab.Ptr("head"),
-				StartSha:     gitlab.Ptr("start"),
-				NewPath:      gitlab.Ptr("file.go"),
-				PositionType: gitlab.Ptr("text"),
+				BaseSha:      util.Ptr("base"),
+				HeadSha:      util.Ptr("head"),
+				StartSha:     util.Ptr("start"),
+				NewPath:      util.Ptr("file.go"),
+				PositionType: util.Ptr("text"),
 				LineRange: &api.LineRangeOptions{
 					Start: &api.LinePositionOptions{
-						LineCode: gitlab.Ptr("code1"),
-						Type:     gitlab.Ptr("new"),
-						NewLine:  gitlab.Ptr(int64(10)),
+						LineCode: util.Ptr("code1"),
+						Type:     util.Ptr("new"),
+						NewLine:  util.Ptr(int64(10)),
 					},
 					End: &api.LinePositionOptions{
-						LineCode: gitlab.Ptr("code2"),
-						Type:     gitlab.Ptr("new"),
-						NewLine:  gitlab.Ptr(int64(15)),
-					},
-				},
-			},
-			expected: &gitlab.PositionOptions{
-				BaseSHA:      gitlab.Ptr("base"),
-				HeadSHA:      gitlab.Ptr("head"),
-				StartSHA:     gitlab.Ptr("start"),
-				NewPath:      gitlab.Ptr("file.go"),
-				PositionType: gitlab.Ptr("text"),
-				LineRange: &gitlab.LineRangeOptions{
-					Start: &gitlab.LinePositionOptions{
-						LineCode: gitlab.Ptr("code1"),
-						Type:     gitlab.Ptr("new"),
-						NewLine:  gitlab.Ptr(int64(10)),
-					},
-					End: &gitlab.LinePositionOptions{
-						LineCode: gitlab.Ptr("code2"),
-						Type:     gitlab.Ptr("new"),
-						NewLine:  gitlab.Ptr(int64(15)),
+						LineCode: util.Ptr("code2"),
+						Type:     util.Ptr("new"),
+						NewLine:  util.Ptr(int64(15)),
 					},
 				},
 			},
@@ -330,10 +284,14 @@ func TestConvertInlineCommentPosition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := convertInlineCommentPosition(tt.input)
 
-			if tt.expected == nil && result != nil {
-				t.Error("expected nil result")
+			if tt.wantNil {
+				if result != nil {
+					t.Error("expected nil result")
+				}
+				return
 			}
-			if tt.expected != nil && result == nil {
+
+			if result == nil {
 				t.Error("expected non-nil result")
 			}
 		})
@@ -342,39 +300,27 @@ func TestConvertInlineCommentPosition(t *testing.T) {
 
 func TestConvertInlineLineRange(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    *api.LineRangeOptions
-		expected *gitlab.LineRangeOptions
+		name    string
+		input   *api.LineRangeOptions
+		wantNil bool
 	}{
 		{
-			name:     "nil line range",
-			input:    nil,
-			expected: nil,
+			name:    "nil line range",
+			input:   nil,
+			wantNil: true,
 		},
 		{
 			name: "complete line range",
 			input: &api.LineRangeOptions{
 				Start: &api.LinePositionOptions{
-					LineCode: gitlab.Ptr("start_code"),
-					Type:     gitlab.Ptr("new"),
-					NewLine:  gitlab.Ptr(int64(5)),
+					LineCode: util.Ptr("start_code"),
+					Type:     util.Ptr("new"),
+					NewLine:  util.Ptr(int64(5)),
 				},
 				End: &api.LinePositionOptions{
-					LineCode: gitlab.Ptr("end_code"),
-					Type:     gitlab.Ptr("new"),
-					NewLine:  gitlab.Ptr(int64(10)),
-				},
-			},
-			expected: &gitlab.LineRangeOptions{
-				Start: &gitlab.LinePositionOptions{
-					LineCode: gitlab.Ptr("start_code"),
-					Type:     gitlab.Ptr("new"),
-					NewLine:  gitlab.Ptr(int64(5)),
-				},
-				End: &gitlab.LinePositionOptions{
-					LineCode: gitlab.Ptr("end_code"),
-					Type:     gitlab.Ptr("new"),
-					NewLine:  gitlab.Ptr(int64(10)),
+					LineCode: util.Ptr("end_code"),
+					Type:     util.Ptr("new"),
+					NewLine:  util.Ptr(int64(10)),
 				},
 			},
 		},
@@ -383,17 +329,9 @@ func TestConvertInlineLineRange(t *testing.T) {
 			input: &api.LineRangeOptions{
 				Start: nil,
 				End: &api.LinePositionOptions{
-					LineCode: gitlab.Ptr("end_code"),
-					Type:     gitlab.Ptr("new"),
-					NewLine:  gitlab.Ptr(int64(10)),
-				},
-			},
-			expected: &gitlab.LineRangeOptions{
-				Start: nil,
-				End: &gitlab.LinePositionOptions{
-					LineCode: gitlab.Ptr("end_code"),
-					Type:     gitlab.Ptr("new"),
-					NewLine:  gitlab.Ptr(int64(10)),
+					LineCode: util.Ptr("end_code"),
+					Type:     util.Ptr("new"),
+					NewLine:  util.Ptr(int64(10)),
 				},
 			},
 		},
@@ -403,10 +341,14 @@ func TestConvertInlineLineRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := convertInlineLineRange(tt.input)
 
-			if tt.expected == nil && result != nil {
-				t.Error("expected nil result")
+			if tt.wantNil {
+				if result != nil {
+					t.Error("expected nil result")
+				}
+				return
 			}
-			if tt.expected != nil && result == nil {
+
+			if result == nil {
 				t.Error("expected non-nil result")
 			}
 		})
@@ -415,41 +357,30 @@ func TestConvertInlineLineRange(t *testing.T) {
 
 func TestConvertInlineLinePosition(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    *api.LinePositionOptions
-		expected *gitlab.LinePositionOptions
+		name    string
+		input   *api.LinePositionOptions
+		wantNil bool
 	}{
 		{
-			name:     "nil position",
-			input:    nil,
-			expected: nil,
+			name:    "nil position",
+			input:   nil,
+			wantNil: true,
 		},
 		{
 			name: "complete position",
 			input: &api.LinePositionOptions{
-				LineCode: gitlab.Ptr("code123"),
-				Type:     gitlab.Ptr("new"),
-				OldLine:  gitlab.Ptr(int64(5)),
-				NewLine:  gitlab.Ptr(int64(10)),
-			},
-			expected: &gitlab.LinePositionOptions{
-				LineCode: gitlab.Ptr("code123"),
-				Type:     gitlab.Ptr("new"),
-				OldLine:  gitlab.Ptr(int64(5)),
-				NewLine:  gitlab.Ptr(int64(10)),
+				LineCode: util.Ptr("code123"),
+				Type:     util.Ptr("new"),
+				OldLine:  util.Ptr(int64(5)),
+				NewLine:  util.Ptr(int64(10)),
 			},
 		},
 		{
 			name: "position with only new line",
 			input: &api.LinePositionOptions{
-				LineCode: gitlab.Ptr("code456"),
-				Type:     gitlab.Ptr("new"),
-				NewLine:  gitlab.Ptr(int64(15)),
-			},
-			expected: &gitlab.LinePositionOptions{
-				LineCode: gitlab.Ptr("code456"),
-				Type:     gitlab.Ptr("new"),
-				NewLine:  gitlab.Ptr(int64(15)),
+				LineCode: util.Ptr("code456"),
+				Type:     util.Ptr("new"),
+				NewLine:  util.Ptr(int64(15)),
 			},
 		},
 	}
@@ -458,93 +389,90 @@ func TestConvertInlineLinePosition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := convertInlineLinePosition(tt.input)
 
-			if tt.expected == nil && result != nil {
-				t.Error("expected nil result")
+			if tt.wantNil {
+				if result != nil {
+					t.Error("expected nil result")
+				}
+				return
 			}
-			if tt.expected != nil && result == nil {
+
+			if result == nil {
 				t.Error("expected non-nil result")
 			}
 		})
 	}
 }
 
-func TestGetPullRequestInfo(t *testing.T) {
-	// Create a mock server
-	mux, server, client := setupMockServer(t)
-	defer server.Close()
-
+func TestGitLabService_GetPullRequestInfo(t *testing.T) {
 	tests := []struct {
 		name        string
 		url         string
-		setupMock   func()
+		setupMock   func(mux *http.ServeMux)
 		expectError bool
 		validate    func(*testing.T, *api.PullRequestInfo)
 	}{
 		{
 			name: "successful fetch",
 			url:  "https://gitlab.com/test/project/-/merge_requests/1",
-			setupMock: func() {
-				// Mock GetMergeRequest
+			setupMock: func(mux *http.ServeMux) {
 				mux.HandleFunc("/api/v4/projects/test%2Fproject/merge_requests/1", func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_, _ = fmt.Fprint(w, `{
-                        "id": 1,
-                        "iid": 1,
-                        "project_id": 123,
-                        "source_branch": "feature",
-                        "target_branch": "main",
-                        "diff_refs": {
-                            "base_sha": "base123",
-                            "head_sha": "head123",
-                            "start_sha": "start123"
-                        }
-                    }`)
+						"id": 1,
+						"iid": 1,
+						"project_id": 123,
+						"source_branch": "feature",
+						"target_branch": "main",
+						"diff_refs": {
+							"base_sha": "base123",
+							"head_sha": "head123",
+							"start_sha": "start123"
+						}
+					}`)
 				})
-				// Mock GetProject
 				mux.HandleFunc("/api/v4/projects/123", func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_, _ = fmt.Fprint(w, `{
-                        "id": 123,
-                        "name": "project",
-                        "path_with_namespace": "test/project",
-                        "http_url_to_repo": "https://gitlab.com/test/project.git"
-                    }`)
+						"id": 123,
+						"name": "project",
+						"path_with_namespace": "test/project",
+						"http_url_to_repo": "https://gitlab.com/test/project.git"
+					}`)
 				})
 			},
-			expectError: false,
 			validate: func(t *testing.T, info *api.PullRequestInfo) {
 				if info.HeadSha != "head123" {
-					t.Errorf("expected HeadSha 'head123', got %s", info.HeadSha)
+					t.Errorf("HeadSha = %q, want %q", info.HeadSha, "head123")
 				}
 				if info.BaseSha != "base123" {
-					t.Errorf("expected BaseSha 'base123', got %s", info.BaseSha)
+					t.Errorf("BaseSha = %q, want %q", info.BaseSha, "base123")
 				}
 				if info.StartSha != "start123" {
-					t.Errorf("expected StartSha 'start123', got %s", info.StartSha)
+					t.Errorf("StartSha = %q, want %q", info.StartSha, "start123")
 				}
 				if info.ProjectName != "project" {
-					t.Errorf("expected ProjectName 'project', got %s", info.ProjectName)
+					t.Errorf("ProjectName = %q, want %q", info.ProjectName, "project")
 				}
 				if info.SourceBranch != "feature" {
-					t.Errorf("expected SourceBranch 'feature', got %s", info.SourceBranch)
+					t.Errorf("SourceBranch = %q, want %q", info.SourceBranch, "feature")
 				}
 				if info.TargetBranch != "main" {
-					t.Errorf("expected TargetBranch 'main', got %s", info.TargetBranch)
+					t.Errorf("TargetBranch = %q, want %q", info.TargetBranch, "main")
 				}
 				if info.ProjectId != 123 {
-					t.Errorf("expected ProjectId 123, got %d", info.ProjectId)
+					t.Errorf("ProjectId = %d, want %d", info.ProjectId, 123)
 				}
 				if info.PullRequestId != 1 {
-					t.Errorf("expected PullRequestId 1, got %d", info.PullRequestId)
+					t.Errorf("PullRequestId = %d, want %d", info.PullRequestId, 1)
 				}
 			},
 		},
 		{
 			name: "merge request not found",
 			url:  "https://gitlab.com/test/project/-/merge_requests/999",
-			setupMock: func() {
+			setupMock: func(mux *http.ServeMux) {
 				mux.HandleFunc("/api/v4/projects/test%2Fproject/merge_requests/999", func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusNotFound)
 					_, _ = fmt.Fprint(w, `{"message": "404 Not Found"}`)
@@ -555,17 +483,163 @@ func TestGetPullRequestInfo(t *testing.T) {
 		{
 			name:        "invalid URL",
 			url:         "invalid-url",
-			setupMock:   func() {},
+			setupMock:   func(mux *http.ServeMux) {},
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupMock()
+			mux, server, client := setupMockServer(t)
+			defer server.Close()
+
+			tt.setupMock(mux)
 
 			svc := &GitLabService{client: client}
 			info, err := svc.GetPullRequestInfo(&tt.url)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if info == nil {
+				t.Fatal("expected non-nil info")
+			}
+			if tt.validate != nil {
+				tt.validate(t, info)
+			}
+		})
+	}
+}
+
+func TestGitLabService_SendInlineComments(t *testing.T) {
+	tests := []struct {
+		name        string
+		comments    []*api.InlineComment
+		prInfo      *api.PullRequestInfo
+		setupMock   func(mux *http.ServeMux, callCount *int)
+		expectError bool
+		wantCalls   int
+	}{
+		{
+			name: "send single comment successfully",
+			comments: []*api.InlineComment{
+				{
+					Body:     util.Ptr("Test comment"),
+					CommitID: util.Ptr("abc123"),
+					Position: &api.InlineCommentPosition{
+						BaseSha:      util.Ptr("base"),
+						HeadSha:      util.Ptr("head"),
+						StartSha:     util.Ptr("start"),
+						NewPath:      util.Ptr("file.go"),
+						PositionType: util.Ptr("text"),
+						NewLine:      util.Ptr(int64(10)),
+					},
+				},
+			},
+			prInfo: &api.PullRequestInfo{
+				ProjectPath:   "test/project",
+				PullRequestId: 1,
+			},
+			setupMock: func(mux *http.ServeMux, callCount *int) {
+				mux.HandleFunc("/api/v4/projects/test%2Fproject/merge_requests/1/discussions", func(w http.ResponseWriter, r *http.Request) {
+					*callCount++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusCreated)
+					_, _ = fmt.Fprint(w, `{"id": "disc1", "notes": []}`)
+				})
+			},
+			wantCalls: 1,
+		},
+		{
+			name: "send multiple comments",
+			comments: []*api.InlineComment{
+				{Body: util.Ptr("Comment 1")},
+				{Body: util.Ptr("Comment 2")},
+				{Body: util.Ptr("Comment 3")},
+			},
+			prInfo: &api.PullRequestInfo{
+				ProjectPath:   "test/multi",
+				PullRequestId: 2,
+			},
+			setupMock: func(mux *http.ServeMux, callCount *int) {
+				mux.HandleFunc("/api/v4/projects/test%2Fmulti/merge_requests/2/discussions", func(w http.ResponseWriter, r *http.Request) {
+					*callCount++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusCreated)
+					_, _ = fmt.Fprintf(w, `{"id": "disc%d", "notes": []}`, *callCount)
+				})
+			},
+			wantCalls: 3,
+		},
+		{
+			name:     "empty comments list",
+			comments: []*api.InlineComment{},
+			prInfo: &api.PullRequestInfo{
+				ProjectPath:   "test/empty",
+				PullRequestId: 3,
+			},
+			setupMock: func(mux *http.ServeMux, callCount *int) {},
+			wantCalls: 0,
+		},
+		{
+			name: "API error returns error",
+			comments: []*api.InlineComment{
+				{Body: util.Ptr("Comment")},
+			},
+			prInfo: &api.PullRequestInfo{
+				ProjectPath:   "test/error",
+				PullRequestId: 4,
+			},
+			setupMock: func(mux *http.ServeMux, callCount *int) {
+				mux.HandleFunc("/api/v4/projects/test%2Ferror/merge_requests/4/discussions", func(w http.ResponseWriter, r *http.Request) {
+					*callCount++
+					// Use 422 to avoid retry behavior (500 triggers retries)
+					w.WriteHeader(http.StatusUnprocessableEntity)
+					_, _ = fmt.Fprint(w, `{"error": "validation error"}`)
+				})
+			},
+			expectError: true,
+			wantCalls:   1,
+		},
+		{
+			name: "skips nil comments",
+			comments: []*api.InlineComment{
+				nil,
+				{Body: util.Ptr("Valid comment")},
+			},
+			prInfo: &api.PullRequestInfo{
+				ProjectPath:   "test/nil",
+				PullRequestId: 5,
+			},
+			setupMock: func(mux *http.ServeMux, callCount *int) {
+				mux.HandleFunc("/api/v4/projects/test%2Fnil/merge_requests/5/discussions", func(w http.ResponseWriter, r *http.Request) {
+					*callCount++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusCreated)
+					_, _ = fmt.Fprint(w, `{"id": "disc1", "notes": []}`)
+				})
+			},
+			wantCalls: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux, server, client := setupMockServer(t)
+			defer server.Close()
+
+			var callCount int
+			tt.setupMock(mux, &callCount)
+
+			svc := &GitLabService{client: client}
+			err := svc.SendInlineComments(tt.comments, tt.prInfo)
 
 			if tt.expectError {
 				if err == nil {
@@ -575,134 +649,17 @@ func TestGetPullRequestInfo(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if info == nil {
-					t.Fatal("expected non-nil info")
-				}
-				if tt.validate != nil {
-					tt.validate(t, info)
-				}
+			}
+
+			if callCount != tt.wantCalls {
+				t.Errorf("API calls = %d, want %d", callCount, tt.wantCalls)
 			}
 		})
 	}
 }
 
-func TestSendInlineComments(t *testing.T) {
-	mux, server, client := setupMockServer(t)
-	defer server.Close()
-
-	tests := []struct {
-		name      string
-		comments  []*api.InlineComment
-		prInfo    *api.PullRequestInfo
-		setupMock func()
-		validate  func(*testing.T, int)
-	}{
-		{
-			name: "send single comment successfully",
-			comments: []*api.InlineComment{
-				{
-					Body:     gitlab.Ptr("Test comment"),
-					CommitID: gitlab.Ptr("abc123"),
-					Position: &api.InlineCommentPosition{
-						BaseSha:      gitlab.Ptr("base"),
-						HeadSha:      gitlab.Ptr("head"),
-						StartSha:     gitlab.Ptr("start"),
-						NewPath:      gitlab.Ptr("file.go"),
-						PositionType: gitlab.Ptr("text"),
-						NewLine:      gitlab.Ptr(int64(10)),
-					},
-				},
-			},
-			prInfo: &api.PullRequestInfo{
-				ProjectPath:   "test/project",
-				PullRequestId: 1,
-			},
-			setupMock: func() {
-				callCount := 0
-				mux.HandleFunc("/api/v4/projects/test%2Fproject/merge_requests/1/discussions", func(w http.ResponseWriter, r *http.Request) {
-					callCount++
-					if r.Method != http.MethodPost {
-						t.Errorf("expected POST request, got %s", r.Method)
-					}
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusCreated)
-					_, _ = fmt.Fprint(w, `{"id": "disc1", "notes": []}`)
-
-				})
-			},
-		},
-		{
-			name: "send multiple comments",
-			comments: []*api.InlineComment{
-				{
-					Body: gitlab.Ptr("Comment 1"),
-				},
-				{
-					Body: gitlab.Ptr("Comment 2"),
-				},
-				{
-					Body: gitlab.Ptr("Comment 3"),
-				},
-			},
-			prInfo: &api.PullRequestInfo{
-				ProjectPath:   "test/project",
-				PullRequestId: 2,
-			},
-			setupMock: func() {
-				callCount := 0
-				mux.HandleFunc("/api/v4/projects/test%2Fproject/merge_requests/2/discussions", func(w http.ResponseWriter, r *http.Request) {
-					callCount++
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusCreated)
-					_, _ = fmt.Fprintf(w, `{"id": "disc%d", "notes": []}`, callCount)
-				})
-			},
-		},
-		{
-			name:     "empty comments list",
-			comments: []*api.InlineComment{},
-			prInfo: &api.PullRequestInfo{
-				ProjectPath:   "test/project",
-				PullRequestId: 3,
-			},
-			setupMock: func() {
-
-			},
-		},
-		{
-			name: "API error - should log but not fail",
-			comments: []*api.InlineComment{
-				{
-					Body: gitlab.Ptr("Comment"),
-				},
-			},
-			prInfo: &api.PullRequestInfo{
-				ProjectPath:   "test/project",
-				PullRequestId: 4,
-			},
-			setupMock: func() {
-				mux.HandleFunc("/api/v4/projects/test%2Fproject/merge_requests/4/discussions", func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusInternalServerError)
-					_, _ = fmt.Fprint(w, `{"error": "internal error"}`)
-				})
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mux = http.NewServeMux()
-			tt.setupMock()
-
-			svc := &GitLabService{client: client}
-
-			_ = svc.SendInlineComments(tt.comments, tt.prInfo)
-
-		})
-	}
-}
-
 func setupMockServer(t *testing.T) (*http.ServeMux, *httptest.Server, *gitlab.Client) {
+	t.Helper()
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 

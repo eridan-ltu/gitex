@@ -3,12 +3,14 @@ package vcs_provider
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/eridan-ltu/gitex/api"
 	"github.com/eridan-ltu/gitex/internal/util"
+	"github.com/hashicorp/go-retryablehttp"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
@@ -18,8 +20,14 @@ type GitLabService struct {
 
 func NewGitLabService(cfg *api.Config) (*GitLabService, error) {
 	baseUrl := util.GetOrDefault(&cfg.VcsRemoteUrl, "https://gitlab.com/")
-	clientOptionFunc := gitlab.WithBaseURL(baseUrl)
-	client, err := gitlab.NewClient(cfg.VcsApiKey, clientOptionFunc)
+
+	client, err := gitlab.NewClient(
+		cfg.VcsApiKey,
+		gitlab.WithBaseURL(baseUrl),
+		gitlab.WithCustomRetry(RetryPolicy),
+		gitlab.WithCustomRetryMax(3),
+		gitlab.WithErrorHandler(retryablehttp.PassthroughErrorHandler),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitLab client: %w", err)
 	}
@@ -57,18 +65,46 @@ func (g *GitLabService) GetPullRequestInfo(pullRequestURL *string) (*api.PullReq
 }
 
 func (g *GitLabService) SendInlineComments(comments []*api.InlineComment, pullRequestInfo *api.PullRequestInfo) error {
-	failed := util.WithRetry(comments, 3, func(comment *api.InlineComment) error {
+	var failedCount int
+
+	for _, comment := range comments {
 		gitlabComment := convertApiComment(comment)
 		if gitlabComment == nil {
-			return nil
+			continue
 		}
+
 		_, _, err := g.client.Discussions.CreateMergeRequestDiscussion(pullRequestInfo.ProjectPath, pullRequestInfo.PullRequestId, gitlabComment)
-		return err
-	})
-	if len(failed) > 0 {
-		return fmt.Errorf("failed to send %d comments after retries", len(failed))
+		if err != nil {
+			path := "unknown"
+			var line int64
+			if gitlabComment.Position != nil {
+				path = util.GetOrDefault(gitlabComment.Position.NewPath, util.GetOrDefault(gitlabComment.Position.OldPath, "unknown"))
+				if gitlabComment.Position.NewLine != nil {
+					line = *gitlabComment.Position.NewLine
+				} else if gitlabComment.Position.OldLine != nil {
+					line = *gitlabComment.Position.OldLine
+				}
+			}
+
+			g.logGitlabError(err, path, line)
+			failedCount++
+		}
+	}
+
+	if failedCount > 0 {
+		return fmt.Errorf("failed to send %d comments", failedCount)
 	}
 	return nil
+}
+
+func (g *GitLabService) logGitlabError(err error, path string, line int64) {
+	var glErr *gitlab.ErrorResponse
+	if errors.As(err, &glErr) {
+		log.Printf("failed to create comment on %s:%d: %s (status %d)",
+			path, line, glErr.Message, glErr.Response.StatusCode)
+	} else {
+		log.Printf("failed to create comment on %s:%d: %v", path, line, err)
+	}
 }
 
 func (g *GitLabService) parseWebUrl(webUrl string) (string, int, error) {

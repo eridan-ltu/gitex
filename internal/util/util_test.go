@@ -156,26 +156,75 @@ func TestWithRetry(t *testing.T) {
 }
 
 func TestGetOrDefault(t *testing.T) {
-	t.Run("nil pointer returns default", func(t *testing.T) {
-		result := GetOrDefault(nil, "default")
-		if result != "default" {
-			t.Errorf("expected 'default', got %q", result)
-		}
-	})
+	tests := []struct {
+		name     string
+		value    *string
+		def      string
+		expected string
+	}{
+		{
+			name:     "nil pointer returns default",
+			value:    nil,
+			def:      "default",
+			expected: "default",
+		},
+		{
+			name:     "empty string returns default",
+			value:    Ptr(""),
+			def:      "default",
+			expected: "default",
+		},
+		{
+			name:     "non-empty string returns value",
+			value:    Ptr("actual"),
+			def:      "default",
+			expected: "actual",
+		},
+	}
 
-	t.Run("empty string returns default", func(t *testing.T) {
-		empty := ""
-		result := GetOrDefault(&empty, "default")
-		if result != "default" {
-			t.Errorf("expected 'default', got %q", result)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetOrDefault(tt.value, tt.def)
+			if result != tt.expected {
+				t.Errorf("GetOrDefault() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
 
-	t.Run("non-empty string returns value", func(t *testing.T) {
-		value := "actual"
-		result := GetOrDefault(&value, "default")
-		if result != "actual" {
-			t.Errorf("expected 'actual', got %q", result)
-		}
-	})
+func TestGetOrDefaultInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    *int
+		def      int
+		expected int
+	}{
+		{
+			name:     "nil pointer returns default",
+			value:    nil,
+			def:      42,
+			expected: 42,
+		},
+		{
+			name:     "zero value returns zero",
+			value:    Ptr(0),
+			def:      42,
+			expected: 0,
+		},
+		{
+			name:     "non-zero value returns value",
+			value:    Ptr(100),
+			def:      42,
+			expected: 100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetOrDefaultInt(tt.value, tt.def)
+			if result != tt.expected {
+				t.Errorf("GetOrDefaultInt() = %d, want %d", result, tt.expected)
+			}
+		})
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -25,7 +24,7 @@ func NewGitHubService(cfg *api.Config) (*GitHubService, error) {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
 	retryClient.Logger = nil
-	retryClient.CheckRetry = githubRetryPolicy
+	retryClient.CheckRetry = RetryPolicy
 	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
 
 	httpClient := retryClient.StandardClient()
@@ -42,35 +41,6 @@ func NewGitHubService(cfg *api.Config) (*GitHubService, error) {
 	return &GitHubService{
 		client: client,
 	}, nil
-}
-
-func githubRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
-	if ctx.Err() != nil {
-		return false, ctx.Err()
-	}
-
-	if err != nil {
-		log.Printf("connection error, will retry: %v", err)
-		return true, nil
-	}
-
-	if resp.StatusCode == http.StatusTooManyRequests ||
-		(resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0") {
-		log.Printf("rate limited (status %d), will retry", resp.StatusCode)
-		return true, nil
-	}
-
-	if resp.StatusCode >= 500 && resp.StatusCode != 501 {
-		log.Printf("server error %d, will retry", resp.StatusCode)
-		return true, nil
-	}
-
-	if resp.StatusCode >= 400 {
-		log.Printf("client error %d - not retrying", resp.StatusCode)
-		return false, nil
-	}
-
-	return false, nil
 }
 
 func (g *GitHubService) GetPullRequestInfo(pullRequestURL *string) (*api.PullRequestInfo, error) {
@@ -185,26 +155,32 @@ func (g *GitHubService) convertApiComment(
 		out.Path = pos.OldPath
 	}
 
-	switch {
-	case pos.NewLine != nil:
-		out.Line = util.Ptr(int(*pos.NewLine))
-		out.Side = util.Ptr("RIGHT")
+	//multiline
+	if pos.LineRange != nil && pos.LineRange.Start != nil && pos.LineRange.End != nil {
+		// FYI: Line = end, StartLine = start
+		if pos.LineRange.End.NewLine != nil {
+			out.Line = util.Ptr(int(*pos.LineRange.End.NewLine))
+			out.Side = util.Ptr("RIGHT")
+		} else if pos.LineRange.End.OldLine != nil {
+			out.Line = util.Ptr(int(*pos.LineRange.End.OldLine))
+			out.Side = util.Ptr("LEFT")
+		}
 
-	case pos.OldLine != nil:
-		out.Line = util.Ptr(int(*pos.OldLine))
-		out.Side = util.Ptr("LEFT")
-	}
-
-	if pos.LineRange != nil {
-		if pos.LineRange.Start != nil {
-			if pos.LineRange.Start.NewLine != nil {
-				out.StartLine = util.Ptr(int(*pos.LineRange.Start.NewLine))
-				out.StartSide = util.Ptr("RIGHT")
-			} else if pos.LineRange.Start.OldLine != nil {
-				out.StartLine = util.Ptr(int(*pos.LineRange.Start.OldLine))
-
-				out.StartSide = util.Ptr("LEFT")
-			}
+		if pos.LineRange.Start.NewLine != nil {
+			out.StartLine = util.Ptr(int(*pos.LineRange.Start.NewLine))
+			out.StartSide = util.Ptr("RIGHT")
+		} else if pos.LineRange.Start.OldLine != nil {
+			out.StartLine = util.Ptr(int(*pos.LineRange.Start.OldLine))
+			out.StartSide = util.Ptr("LEFT")
+		}
+	} else { //singe line
+		switch {
+		case pos.NewLine != nil:
+			out.Line = util.Ptr(int(*pos.NewLine))
+			out.Side = util.Ptr("RIGHT")
+		case pos.OldLine != nil:
+			out.Line = util.Ptr(int(*pos.OldLine))
+			out.Side = util.Ptr("LEFT")
 		}
 	}
 
