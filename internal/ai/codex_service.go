@@ -154,6 +154,7 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 			3. generate inline notes for changes in this format
 			[{
 			"body": <YOUR_COMMENT>,
+			"commit_id": "%s"
 			"position": {
 			  "position_type": "text",
 			  "base_sha": "%s",
@@ -179,7 +180,7 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 	        store json inside %s commentsFile.
 	        4. Generate overall review inside review.codex commentsFile as plain text.
 	        5. Do not include the findings you specified in the inline comments
-			`, options.BaseSha, options.BaseSha, options.StartSha, options.HeadSha, commentsFileName),
+			`, options.BaseSha, options.HeadSha, options.BaseSha, options.StartSha, options.HeadSha, commentsFileName),
 	)
 
 	cmd.Env = c.env

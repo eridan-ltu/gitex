@@ -93,7 +93,6 @@ func convertApiComment(comment *api.InlineComment) *gitlab.CreateMergeRequestDis
 	}
 	return &gitlab.CreateMergeRequestDiscussionOptions{
 		Body:      comment.Body,
-		CommitID:  comment.CommitID,
 		CreatedAt: comment.CreatedAt,
 		Position:  convertInlineCommentPosition(comment.Position),
 	}

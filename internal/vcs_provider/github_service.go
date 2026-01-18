@@ -38,16 +38,17 @@ func (g *GitHubService) GetPullRequestInfo(pullRequestURL *string) (*api.PullReq
 		return nil, fmt.Errorf("failed to get merge request: %v", err)
 	}
 	cloneUrl := pr.Head.Repo.GetCloneURL()
-	projectName := pr.Head.Repo.GetName()
+	projectName := pr.Base.Repo.GetName()
 
 	return &api.PullRequestInfo{
 		HeadSha:        pr.Head.GetSHA(),
+		BaseSha:        pr.Base.GetSHA(),
 		ProjectName:    projectName,
 		ProjectHttpUrl: cloneUrl,
-		ProjectId:      pr.Head.Repo.GetID(),
+		ProjectId:      pr.Base.Repo.GetID(),
 		SourceBranch:   pr.Head.GetRef(),
-		PullRequestId:  pr.GetID(),
-		Owner:          owner,
+		PullRequestId:  int64(pr.GetNumber()), //
+		Owner:          pr.Base.Repo.GetOwner().GetLogin(),
 	}, nil
 }
 
@@ -67,10 +68,6 @@ func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) 
 	u, err := url.Parse(webUrl)
 	if err != nil {
 		return "", "", 0, err
-	}
-
-	if u.Host != "github.com" {
-		return "", "", 0, errors.New("not a github.com URL")
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -133,10 +130,6 @@ func (g *GitHubService) convertApiComment(
 				out.StartSide = util.Ptr("LEFT")
 			}
 		}
-	}
-
-	if pos.PositionType != nil {
-		out.SubjectType = pos.PositionType
 	}
 
 	return out

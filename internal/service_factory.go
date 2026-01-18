@@ -56,6 +56,9 @@ func (a *ServiceFactory) CreateVCSProvider(kind api.VCSProviderType) (api.Remote
 	switch kind {
 	case VCSProviderTypeGitlab:
 		return vcs_provider.NewGitLabService(a.cfg)
+	case VCSProviderTypeGithub:
+		return vcs_provider.NewGitHubService(a.cfg)
+
 	default:
 		return nil, fmt.Errorf("unsupported remote git service: %s", kind)
 	}
