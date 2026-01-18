@@ -96,7 +96,6 @@ func TestParseInput(t *testing.T) {
 }
 
 func TestPopulateFromEnv(t *testing.T) {
-	// Save original env and restore after test
 	origVcsKey := os.Getenv("VCS_API_KEY")
 	origAiKey := os.Getenv("AI_API_KEY")
 	origCI := os.Getenv("CI")

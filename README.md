@@ -39,15 +39,15 @@ gitex https://github.com/yourorg/yourproject/pull/123
 **From source:**
 
 ```bash
-git clone https://github.com/user/gitex.git
+git clone https://github.com/eridan-ltu/gitex.git
 cd gitex
-go build -o gitex ./cmd
+go build -o gitex
 ```
 
 **Or with go install:**
 
 ```bash
-go install github.com/user/gitex/cmd@latest
+go install github.com/eridan-ltu/gitex@latest
 ```
 
 ## Options
