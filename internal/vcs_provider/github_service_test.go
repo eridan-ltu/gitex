@@ -47,6 +47,27 @@ func TestGitHubService_parseWebUrl(t *testing.T) {
 			wantNumber: 456,
 		},
 		{
+			name:       "PR URL with files tab",
+			url:        "https://github.com/owner/repo/pull/789/files",
+			wantOwner:  "owner",
+			wantRepo:   "repo",
+			wantNumber: 789,
+		},
+		{
+			name:       "PR URL with commits tab",
+			url:        "https://github.com/owner/repo/pull/101/commits",
+			wantOwner:  "owner",
+			wantRepo:   "repo",
+			wantNumber: 101,
+		},
+		{
+			name:       "PR URL with checks tab",
+			url:        "https://github.com/owner/repo/pull/202/checks",
+			wantOwner:  "owner",
+			wantRepo:   "repo",
+			wantNumber: 202,
+		},
+		{
 			name:        "invalid URL - not a PR",
 			url:         "https://github.com/owner/repo",
 			expectError: true,

@@ -69,6 +69,8 @@ func TestNewGitLabService(t *testing.T) {
 }
 
 func TestParseWebUrl(t *testing.T) {
+	svc := &GitLabService{}
+
 	tests := []struct {
 		name            string
 		url             string
@@ -105,13 +107,29 @@ func TestParseWebUrl(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name:        "invalid URL format - too short",
-			url:         "https://gitlab.com/user/project",
-			expectError: true,
+			name:            "MR URL with diffs tab",
+			url:             "https://gitlab.com/user/project/-/merge_requests/123/diffs",
+			expectedProject: "user/project",
+			expectedMRId:    123,
+			expectError:     false,
 		},
 		{
-			name:        "invalid URL format - missing parts",
-			url:         "https://gitlab.com/-/merge_requests/123",
+			name:            "MR URL with commits tab",
+			url:             "https://gitlab.com/user/project/-/merge_requests/123/commits",
+			expectedProject: "user/project",
+			expectedMRId:    123,
+			expectError:     false,
+		},
+		{
+			name:            "MR URL with pipelines tab",
+			url:             "https://gitlab.com/user/project/-/merge_requests/123/pipelines",
+			expectedProject: "user/project",
+			expectedMRId:    123,
+			expectError:     false,
+		},
+		{
+			name:        "invalid URL format - missing merge_requests",
+			url:         "https://gitlab.com/user/project/-/issues/123",
 			expectError: true,
 		},
 		{
@@ -129,18 +147,11 @@ func TestParseWebUrl(t *testing.T) {
 			url:         "",
 			expectError: true,
 		},
-		{
-			name:            "URL without merge_requests segment",
-			url:             "https://gitlab.com/user/project/-/issues/123",
-			expectedProject: "user/project",
-			expectedMRId:    123,
-			expectError:     false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			projectPath, mrId, err := parseWebUrl(tt.url)
+			projectPath, mrId, err := svc.parseWebUrl(tt.url)
 
 			if tt.expectError {
 				if err == nil {
@@ -685,7 +696,7 @@ func TestSendInlineComments(t *testing.T) {
 
 			svc := &GitLabService{client: client}
 
-			svc.SendInlineComments(tt.comments, tt.prInfo)
+			_ = svc.SendInlineComments(tt.comments, tt.prInfo)
 
 		})
 	}

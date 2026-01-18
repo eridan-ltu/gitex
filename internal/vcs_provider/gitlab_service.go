@@ -27,7 +27,7 @@ func NewGitLabService(cfg *api.Config) (*GitLabService, error) {
 }
 
 func (g *GitLabService) GetPullRequestInfo(pullRequestURL *string) (*api.PullRequestInfo, error) {
-	projectPath, mrId, err := parseWebUrl(*pullRequestURL)
+	projectPath, mrId, err := g.parseWebUrl(*pullRequestURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse merge request URL: %v", err)
 	}
@@ -69,19 +69,28 @@ func (g *GitLabService) SendInlineComments(comments []*api.InlineComment, pullRe
 	return nil
 }
 
-func parseWebUrl(webUrl string) (string, int, error) {
+func (g *GitLabService) parseWebUrl(webUrl string) (string, int, error) {
 	parsed, err := url.Parse(webUrl)
 	if err != nil {
 		return "", 0, fmt.Errorf("invalid URL: %w", err)
 	}
 
 	parts := strings.Split(parsed.Path, "/")
-	if len(parts) < 6 {
+
+	mrIndex := -1
+	for i, p := range parts {
+		if p == "merge_requests" {
+			mrIndex = i
+			break
+		}
+	}
+
+	if mrIndex == -1 || mrIndex+1 >= len(parts) {
 		return "", 0, fmt.Errorf("invalid Merge Request URL format")
 	}
 
-	projectPath := strings.Join(parts[1:len(parts)-3], "/")
-	mrIdStr := parts[len(parts)-1]
+	projectPath := strings.Join(parts[1:mrIndex-1], "/")
+	mrIdStr := parts[mrIndex+1]
 
 	mrId, err := strconv.Atoi(mrIdStr)
 	if err != nil {

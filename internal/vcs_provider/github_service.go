@@ -92,7 +92,7 @@ func (g *GitHubService) parseWebUrl(webUrl string) (string, string, int, error) 
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 
-	if len(parts) != 4 || parts[2] != "pull" {
+	if len(parts) < 4 || parts[2] != "pull" {
 		return "", "", 0, errors.New("failed to parse URL")
 	}
 
