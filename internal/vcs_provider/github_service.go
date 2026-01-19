@@ -156,7 +156,7 @@ func (g *GitHubService) convertApiComment(
 	}
 
 	//multiline
-	if pos.LineRange != nil && pos.LineRange.Start != nil && pos.LineRange.End != nil {
+	if pos.CommentType == "MULTI_LINE" && pos.LineRange != nil && pos.LineRange.Start != nil && pos.LineRange.End != nil {
 		// FYI: Line = end, StartLine = start
 		if pos.LineRange.End.NewLine != nil {
 			out.Line = util.Ptr(int(*pos.LineRange.End.NewLine))
@@ -173,7 +173,7 @@ func (g *GitHubService) convertApiComment(
 			out.StartLine = util.Ptr(int(*pos.LineRange.Start.OldLine))
 			out.StartSide = util.Ptr("LEFT")
 		}
-	} else { //singe line
+	} else { //single line
 		switch {
 		case pos.NewLine != nil:
 			out.Line = util.Ptr(int(*pos.NewLine))

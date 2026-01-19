@@ -125,61 +125,170 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 		"-s", "workspace-write",
 		"--model", c.cfg.AiModel,
 		fmt.Sprintf(`
-			1. you are in the PR mode. consider git diff %s..HEAD.
-			2. a. **Identify suspicious code**  
-				   - Focus on the variable, method, or expression that might cause a problem.  
-				   - Note its type and where it comes from.
+			You are an AI code reviewer. You need to git diff %s..HEAD. You need to analyze the diff and to generate inline comments strictly in the following JSON format:
+
+				RULES:
 				
-				b. **Gather evidence**  
-				   - Look at the declaration, type, annotations, or language-specific hints (e.g., @Nullable, Optional, const, final) to understand possible values.  
-				   - Check documentation, comments, and tests for intended behavior
-				   - Trace all assignments, return values, and constructor calls leading to this code.
+				Single-line comments:
+				- Omit position[line_range].
+				- Include both old_path and new_path.
+				- Added line: use position[new_line] only, omit old_line.
+				- Removed line: use position[old_line] only, omit new_line.
+				- Unchanged line: include both old_line and new_line, using diff-provided line numbers.
+                - ***Do not guess; line numbers may differ due to previous changes. ***
+				- Set comment_type = SINGLE_LINE.
+				- Set line_type = ADD, REMOVE, or UNCHANGED.
 				
-				c. **Analyze context and code paths**  
-				   - Examine control flow: consider conditions, loops, early returns, or side effects.  
-				   - Look at external factors like database values, API calls, or user input that might influence the value.
+                Multi-line comments:
+				- Use position[line_range] to indicate the start and end of the comment.
+				- Line numbers in start and end follow the same rules as single-line comments:
+				- Added lines: fill only new_line
+				- Removed lines: fill only old_line
+				- Unchanged lines: fill both old_line and new_line
+				- line_type = ADD, REMOVE, or UNCHANGED depending on the type of lines being commented.
+                - Set comment_type = MULTI_LINE.
 				
-				d. **Classify the risk**  
-				   - **Definite:** evidence shows a problem can occur.  
-				   - **Possible:** could occur under rare or edge cases.  
-				   - **Impossible:** evidence shows the code is safe.
+				Content
+				- Comment only on lines present in the diff.
+				- Each comment should be a meaningful suggestion, improvement, or note.
+				- Always reference the exact line numbers from the diff. Never guess the lines
 				
-				e. **Explain reasoning step by step**  
-				   - For each classification, provide the path, assignments, types, or documentation that led to the conclusion.  
-				   - Avoid vague statements like “might be null” without proof.
+				Output
+				- JSON must follow this schema:
 				
-				f. **Suggest evidence-based actions (optional)**  
-				   - Only suggest fixes or guards if the analysis shows a real risk.  
-				   - Examples: add null check, refactor initialization, add test coverage.
-			3. generate inline notes for changes in this format
-			[{
-			"body": <YOUR_COMMENT>,
-			"commit_id": "%s",
-			"position": {
-			  "position_type": "text",
-			  "base_sha": "%s",
-			  "start_sha": "%s",
-			  "head_sha": "%s",
-			  "old_path": "<OLD_FILE_PATH>",
-			  "new_path": "<NEW_FILE_PATH>",
-			  "new_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_NEW_LINE>,
-	          "old_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_OLD_LINE>,
-	          "line_range": {
-				"start": {
-	                "new_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_NEW_LINE>,
-	                "old_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_OLD_LINE>
-	            },
-	            "end": {
-	                "new_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_NEW_LINE>,
-	                "old_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_OLD_LINE>
-	            }
-	          }
-			}]'
-	        use line_range instead of new_line and old_line if comment belongs to a range of lines.
-			when there is a single line comment, use new_line or old_line (depends on where the change was), omit line_range.
+				[{
+				  "body": "<YOUR_COMMENT>",
+				  "commit_id": "%s",
+				  "position": {
+					"position_type": "text",
+					"base_sha": "%s",
+					"start_sha": "%s",
+					"head_sha": "%s",
+					"old_path": "<OLD_FILE_PATH>",
+					"new_path": "<NEW_FILE_PATH>",
+					"new_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_NEW_LINE>,
+					"old_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_OLD_LINE>,
+					"line_range": {
+					  "start": {
+						"new_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_NEW_LINE>,
+						"old_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_OLD_LINE>
+					  },
+					  "end": {
+						"new_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_NEW_LINE>,
+						"old_line": <LINE_TO_COMMENT_IF_COMMENT_BELONGS_TO_OLD_LINE>
+					  }
+					},
+					"comment_type": "SINGLE_LINE" | "MULTI_LINE",
+					"line_type": "ADD"|"REMOVE"|"UNCHANGED"
+				  }
+				}]
+				
+				Examples
+				1. Single-line added
+					@@ -41,3 +41,4 @@
+					 func add(a int, b int) int {
+					-    return a - b
+					+    return a + b
+					}
+				[{
+				  "body": "Corrected addition here.",
+				  "commit_id": "commitId",
+				  "position": {
+					"position_type": "text",
+					"base_sha": "baseSha",
+					"start_sha": "startSha",
+					"head_sha": "headSha",
+					"old_path": "math.go",
+					"new_path": "math.go",
+					"new_line": 42,
+					"comment_type": "SINGLE_LINE",
+					"line_type": "ADD"
+				  }
+				}]
+				
+				2. Single-line removed
+					@@ -40,5 +40,4 @@
+					 func add(a int, b int) int {
+					-    return a - b
+					+    return a + b
+					}
+				[{
+				  "body": "This line was incorrectly subtracting.",
+				  "commit_id": "commitId",
+				  "position": {
+					"position_type": "text",
+					"base_sha": "baseSha",
+					"start_sha": "startSha",
+					"head_sha": "headSha",
+					"old_path": "math.go",
+					"new_path": "math.go",
+					"old_line": 42,
+					"comment_type": "SINGLE_LINE",
+					"line_type": "REMOVE"
+				  }
+				}]
+				
+				3. Single-line unchanged
+
+					@@ -30,6 +30,8 @@
+					func multiply(a int, b int) int {
+						 result := a * b
+					+    fmt.Println("Debug start")   # line 34 in old file? added in new file
+					+    log.Println("Debug info")    # line 35 in new file
+						 return a / b
+					}
+
+				[{
+				  "body": "This line is unchanged but review for debug code.",
+				  "commit_id": "commitId",
+				  "position": {
+					"position_type": "text",
+					"base_sha": "baseSha",
+					"start_sha": "startSha",
+					"head_sha": "headSha",
+					"old_path": "math.go",
+					"new_path": "math.go",
+					"old_line": 34,
+					"new_line": 36,
+					"comment_type": "SINGLE_LINE",
+					"line_type": "UNCHANGED"
+				  }
+				}]
+				
+				4. Multi-line added
+
+					@@ -11,2 +11,5 @@
+					-    result := a * b
+					-    return result
+					+    result := a * b
+					+    if result < 0 {
+					+        result = 0
+					+    }
+					+    return result
+
+				[{
+				  "body": "Adding a guard for negative results; review logic.",
+				  "commit_id": "commitId",
+				  "position": {
+					"position_type": "text",
+					"base_sha": "baseSha",
+					"start_sha": "startSha",
+					"head_sha": "headSha",
+					"old_path": "math.go",
+					"new_path": "math.go",
+					"line_range": {
+					  "start": { "new_line": 11 },
+					  "end": { "new_line": 14 }
+					},
+					"comment_type": "MULTI_LINE",
+					"line_type": "ADD"
+				  }
+				}]
+			verify json validity(escape special characters).
 	        store json inside %s commentsFile.
-	        4. Generate overall review inside review.codex commentsFile as plain text.
-	        5. Do not include the findings you specified in the inline comments
+	        4. Generate summary review inside review.codex commentsFile as plain text.
+	        5. In the summary do not include the findings you specified in the inline comments
+			6. DO NOT PUSH ANY CHANGES.
 			`, options.BaseSha, options.HeadSha, options.BaseSha, options.StartSha, options.HeadSha, commentsFileName),
 	)
 

@@ -55,6 +55,8 @@ type InlineCommentPosition struct {
 	Height       *int64            `url:"height,omitempty" json:"height,omitempty"`
 	X            *float64          `url:"x,omitempty" json:"x,omitempty"`
 	Y            *float64          `url:"y,omitempty" json:"y,omitempty"`
+	CommentType  string            `url:"comment_type,omitempty" json:"comment_type,omitempty"`
+	LineType     string            `url:"line_type,omitempty" json:"line_type,omitempty"`
 }
 
 type LineRangeOptions struct {

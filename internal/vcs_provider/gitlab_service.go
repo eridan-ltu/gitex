@@ -153,6 +153,27 @@ func convertInlineCommentPosition(p *api.InlineCommentPosition) *gitlab.Position
 	if p == nil {
 		return nil
 	}
+	var multilineBlock *api.LineRangeOptions = nil
+	var newLine *int64 = nil
+	var oldLine *int64 = nil
+	if p.CommentType == "MULTI_LINE" && p.LineRange.End != nil && p.LineRange.Start != nil {
+		multilineBlock = p.LineRange
+		if p.LineType == "REMOVE" {
+			p.LineRange.Start.NewLine = nil
+			p.LineRange.End.NewLine = nil
+		}
+		if p.LineType == "ADD" {
+			p.LineRange.Start.OldLine = nil
+			p.LineRange.End.NewLine = nil
+		}
+	} else {
+		if p.LineType != "REMOVE" {
+			newLine = p.NewLine
+		}
+		if p.LineType != "ADD" {
+			oldLine = p.OldLine
+		}
+	}
 
 	return &gitlab.PositionOptions{
 		BaseSHA:      p.BaseSha,
@@ -161,9 +182,9 @@ func convertInlineCommentPosition(p *api.InlineCommentPosition) *gitlab.Position
 		NewPath:      p.NewPath,
 		OldPath:      p.OldPath,
 		PositionType: p.PositionType,
-		NewLine:      p.NewLine,
-		OldLine:      p.OldLine,
-		LineRange:    convertInlineLineRange(p.LineRange),
+		NewLine:      newLine,
+		OldLine:      oldLine,
+		LineRange:    convertInlineLineRange(multilineBlock),
 		Width:        p.Width,
 		Height:       p.Height,
 		X:            p.X,
