@@ -129,6 +129,17 @@ func (c *CodexService) GeneratePRInlineCommentsWithContext(ctx context.Context, 
 
 				RULES:
 				
+				ABSOLUTE CONSTRAINTS (MUST FOLLOW)
+				- You may ONLY reference line numbers that explicitly appear in the diff hunks
+				- Line numbers come only from @@ -<old>,<count> +<new>,<count> @@
+				- You must compute per-line numbers by incrementing from the hunk header
+				- If a line number cannot be derived with certainty, DO NOT COMMENT
+				- DO NOT GUESS OR INFER LINE NUMBERS
+				- Do NOT assume continuity across hunks
+				- Do NOT reuse numbers from examples
+				- Do NOT comment on context outside the diff
+				- If you cannot place a valid comment with exact line numbers, SKIP it
+				
 				Single-line comments:
 				- Omit position[line_range].
 				- Include both old_path and new_path.
